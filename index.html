@@ -424,7 +424,8 @@ let appState={
   stages:{group:true,bonus:true,r32:false,r16:false,qf:false,sf:false,final:false},
   fixtures:{r32:[],r16:[],qf:[],sf:[],final:[]},
   results:{group:{},r32:{},r16:{},qf:{},sf:{},final:{}},
-  playerPts:{},manualBonus:{},activityFeed:[]
+  playerPts:{},manualBonus:{},activityFeed:[],
+  userData:{},pins:{}
 };
 
 // ─── STORAGE ──────────────────────────────────────────────────
@@ -439,12 +440,22 @@ async function loadAppState(){
     setSyncBar('syncing','⏳ Syncing...');
     const r=await fetch(BIN_URL+'/latest',{headers:{'X-Master-Key':API_KEY}});
     const d=await r.json();
-    if(d.record)appState={...appState,...d.record};
-    // Clean any corrupt player entries (missing/non-string names)
+    if(d.record){
+      const localUserData=appState.userData||{};
+      const localPins=appState.pins||{};
+      appState={...appState,...d.record};
+      // Merge: keep server data but don't lose the current user's in-progress local picks
+      appState.userData=appState.userData||{};
+      appState.pins={...localPins,...(appState.pins||{})};
+      // Ensure current user's saved picks aren't dropped by an older server copy
+      if(currentUser&&localUserData[currentUser])appState.userData[currentUser]={...appState.userData[currentUser],...localUserData[currentUser]};
+    }
     if(Array.isArray(appState.registeredPlayers)){
       appState.registeredPlayers=appState.registeredPlayers.filter(p=>p&&typeof p.name==='string'&&p.name.trim());
     } else {appState.registeredPlayers=[];}
     if(!Array.isArray(appState.activityFeed))appState.activityFeed=[];
+    if(!appState.userData)appState.userData={};
+    if(!appState.pins)appState.pins={};
     setSyncBar('','⚡ LIVE — Watar Partners Internal');
   }catch(e){
     setSyncBar('error','⚠️ Offline — cached data');
@@ -463,10 +474,27 @@ async function saveAppState(){
   }catch(e){setSyncBar('error','⚠️ Save failed');}
 }
 
-function loadUserData(n){try{const r=localStorage.getItem('wc26_u_'+n);return r?JSON.parse(r):{name:n,groupPicks:{},bonusPicks:{},koPicks:{}};}catch(e){return{name:n,groupPicks:{},bonusPicks:{},koPicks:{}};}}
-function saveUserData(ud){localStorage.setItem('wc26_u_'+ud.name,JSON.stringify(ud));}
-function getUserPin(n){return localStorage.getItem('wc26_pin_'+n)||null;}
-function setUserPin(n,pin){localStorage.setItem('wc26_pin_'+n,pin);}
+function loadUserData(n){
+  if(!appState.userData)appState.userData={};
+  if(appState.userData[n])return JSON.parse(JSON.stringify(appState.userData[n]));
+  // fallback to local cache
+  try{const r=localStorage.getItem('wc26_u_'+n);if(r)return JSON.parse(r);}catch(e){}
+  return{name:n,groupPicks:{},bonusPicks:{},koPicks:{}};
+}
+function saveUserData(ud){
+  if(!appState.userData)appState.userData={};
+  appState.userData[ud.name]=ud;
+  localStorage.setItem('wc26_u_'+ud.name,JSON.stringify(ud));
+}
+function getUserPin(n){
+  if(appState.pins&&appState.pins[n])return appState.pins[n];
+  return localStorage.getItem('wc26_pin_'+n)||null;
+}
+function setUserPin(n,pin){
+  if(!appState.pins)appState.pins={};
+  appState.pins[n]=pin;
+  localStorage.setItem('wc26_pin_'+n,pin);
+}
 function loadMyName(){return localStorage.getItem('wc26_myname')||null;}
 function saveMyName(n){localStorage.setItem('wc26_myname',n);}
 
