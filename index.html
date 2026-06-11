@@ -473,7 +473,8 @@ function addActivity(msg){
 
 // ─── INIT ─────────────────────────────────────────────────────
 async function init(){
-  await loadAppState();
+  // Load from JSONbin but don't block UI — show app immediately
+  loadAppState().then(()=>renderAll()).catch(()=>renderAll());
   const saved=loadMyName();
   if(saved&&appState.registeredPlayers.find(p=>p.name===saved)){
     const pin=getUserPin(saved);
