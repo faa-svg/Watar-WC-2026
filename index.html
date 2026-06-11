@@ -405,9 +405,11 @@ const KO_PTS={r32:8,r16:10,qf:12,sf:15,final:20};
 const KO_COUNT={r32:16,r16:8,qf:4,sf:2,final:1};
 const ALL_GROUPS=['A','B','C','D','E','F','G','H','I','J','K','L'];
 
-// ─── COUNTRY FLAGS ────────────────────────────────────────────
-const FLAGS={'Mexico':'🇲🇽','South Africa':'🇿🇦','South Korea':'🇰🇷','Czech Republic':'🇨🇿','Canada':'🇨🇦','Bosnia & Herzegovina':'🇧🇦','Qatar':'🇶🇦','Switzerland':'🇨🇭','Brazil':'🇧🇷','Morocco':'🇲🇦','Haiti':'🇭🇹','Scotland':'🏴󠁧󠁢󠁳󠁣󠁴󠁿','USA':'🇺🇸','Paraguay':'🇵🇾','Australia':'🇦🇺','Turkey':'🇹🇷','Germany':'🇩🇪','Curaçao':'🇨🇼','Ivory Coast':'🇨🇮','Ecuador':'🇪🇨','Netherlands':'🇳🇱','Japan':'🇯🇵','Sweden':'🇸🇪','Tunisia':'🇹🇳','Belgium':'🇧🇪','Egypt':'🇪🇬','Iran':'🇮🇷','New Zealand':'🇳🇿','Spain':'🇪🇸','Cape Verde':'🇨🇻','Saudi Arabia':'🇸🇦','Uruguay':'🇺🇾','France':'🇫🇷','Senegal':'🇸🇳','Iraq':'🇮🇶','Norway':'🇳🇴','Argentina':'🇦🇷','Algeria':'🇩🇿','Austria':'🇦🇹','Jordan':'🇯🇴','Portugal':'🇵🇹','DR Congo':'🇨🇩','Uzbekistan':'🇺🇿','Colombia':'🇨🇴','England':'🏴󠁧󠁢󠁥󠁮󠁧󠁿','Croatia':'🇭🇷','Ghana':'🇬🇭','Panama':'🇵🇦'};
-const fl=t=>FLAGS[t]?FLAGS[t]+' ':'';
+// ─── COUNTRY FLAGS (images — render on ALL devices incl. Windows) ──
+const FLAG_CODES={'Mexico':'mx','South Africa':'za','South Korea':'kr','Czech Republic':'cz','Canada':'ca','Bosnia & Herzegovina':'ba','Qatar':'qa','Switzerland':'ch','Brazil':'br','Morocco':'ma','Haiti':'ht','Scotland':'gb-sct','USA':'us','Paraguay':'py','Australia':'au','Turkey':'tr','Germany':'de','Curaçao':'cw','Ivory Coast':'ci','Ecuador':'ec','Netherlands':'nl','Japan':'jp','Sweden':'se','Tunisia':'tn','Belgium':'be','Egypt':'eg','Iran':'ir','New Zealand':'nz','Spain':'es','Cape Verde':'cv','Saudi Arabia':'sa','Uruguay':'uy','France':'fr','Senegal':'sn','Iraq':'iq','Norway':'no','Argentina':'ar','Algeria':'dz','Austria':'at','Jordan':'jo','Portugal':'pt','DR Congo':'cd','Uzbekistan':'uz','Colombia':'co','England':'gb-eng','Croatia':'hr','Ghana':'gh','Panama':'pa'};
+const FLAGS={}; // kept for compatibility
+function fl(t){const c=FLAG_CODES[t];return c?`<img src="https://flagcdn.com/20x15/${c}.png" alt="" style="vertical-align:-2px;border-radius:2px;margin-right:4px;width:20px;height:15px"> `:'';}
+function flAfter(t){const c=FLAG_CODES[t];return c?` <img src="https://flagcdn.com/20x15/${c}.png" alt="" style="vertical-align:-2px;border-radius:2px;margin-left:4px;width:20px;height:15px">`:'';}
 
 // ─── UPSET BONUS ─────────────────────────────────────────────
 function calcUpsetBonus(odds,outcome){
@@ -710,7 +712,7 @@ function renderGroupStage(el,ud){
         <input type="number" class="score-input" id="gs_${key}_h" min="0" max="20" value="${p.h??''}" placeholder="0" ${locked?'disabled':''}>
         <span class="vs">–</span>
         <input type="number" class="score-input" id="gs_${key}_a" min="0" max="20" value="${p.a??''}" placeholder="0" ${locked?'disabled':''}>
-        <span class="team-name">${m.a} ${FLAGS[m.a]||''}</span>
+        <span class="team-name">${m.a}${flAfter(m.a)}</span>
         <div class="match-meta">
           ${locked?`<span class="lock-badge">🔒 Locked</span>`:`<span class="time-badge">${formatKickoff(m.t)}</span>`}
           ${cd?`<span class="time-badge" style="color:var(--gold)">⏱ ${cd}</span>`:''}
@@ -948,7 +950,7 @@ function renderH2H(){
     const badge=res?`<span style="font-size:10px;color:var(--gray)">${m.h} ${res.h}–${res.a} ${m.a}</span>`:'';
     html+=`<div class="h2h-row">
       <span class="h2h-pick ${same?'h2h-same':'h2h-diff'}">${mine?`${mine.h}–${mine.a}`:'—'}</span>
-      <div class="h2h-match">${fl(m.h)}${m.h} vs ${m.a} ${FLAGS[m.a]||''}<br>${badge}</div>
+      <div class="h2h-match">${fl(m.h)}${m.h} vs ${m.a}${flAfter(m.a)}<br>${badge}</div>
       <span class="h2h-pick ${same?'h2h-same':'h2h-diff'}" style="text-align:right">${theirs?`${theirs.h}–${theirs.a}`:'—'}</span>
     </div>`;
   });
