@@ -462,6 +462,10 @@ async function loadAppState(){
     if(Array.isArray(appState.registeredPlayers)){
       appState.registeredPlayers=cleanPlayers(appState.registeredPlayers);
     } else {appState.registeredPlayers=[];}
+    appState.playerPts=cleanPtsMap(appState.playerPts);
+    appState.manualBonus=cleanPtsMap(appState.manualBonus);
+    if(appState.userData)Object.keys(appState.userData).forEach(k=>{if(/^\d+$/.test(String(k).trim()))delete appState.userData[k];});
+    if(appState.pins)Object.keys(appState.pins).forEach(k=>{if(/^\d+$/.test(String(k).trim()))delete appState.pins[k];});
     if(!Array.isArray(appState.activityFeed))appState.activityFeed=[];
     if(!appState.userData)appState.userData={};
     if(!appState.pins)appState.pins={};
@@ -498,8 +502,8 @@ async function saveAppState(){
     // pins: union (never delete anyone's pin)
     merged.pins={...(server.pins||{}),...(appState.pins||{})};
     // playerPts & manualBonus: merge maps
-    merged.playerPts={...(server.playerPts||{}),...(appState.playerPts||{})};
-    merged.manualBonus={...(server.manualBonus||{}),...(appState.manualBonus||{})};
+    merged.playerPts=cleanPtsMap({...(server.playerPts||{}),...(appState.playerPts||{})});
+    merged.manualBonus=cleanPtsMap({...(server.manualBonus||{}),...(appState.manualBonus||{})});
     // results: deep-merge each stage so one admin save can't erase another's
     merged.results={};
     const stages=['group','r32','r16','qf','sf','final'];
@@ -918,7 +922,7 @@ function getStreak(name){
 
 function renderStandings(){
   const el=document.getElementById('tab-standings');
-  const rows=Object.entries(appState.playerPts||{}).map(([name,d])=>({name,...d})).sort((a,b)=>b.pts-a.pts);
+  const rows=Object.entries(appState.playerPts||{}).filter(([name])=>{const n=String(name).trim();return n&&!/^\d+$/.test(n);}).map(([name,d])=>({name,...d})).sort((a,b)=>b.pts-a.pts);
   let html=`<div class="section-header">🏆 Leaderboard</div>`;
   const allDone=appState.stages.final===false&&rows.length>0&&(appState.results?.final||{})['0'];
   if(allDone&&rows[0]){
