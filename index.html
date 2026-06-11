@@ -191,7 +191,7 @@ body>*{position:relative;z-index:1}
   <div class="header-badge">Watar Partners · Internal</div>
   <h1>We Manage Portfolios by Day,<br><span>We Manage Predictions by Night</span></h1>
   <div class="header-sub">FIFA World Cup 2026 · USA · Canada · Mexico</div>
-  <div class="prize-banner">🏆 Grand Prize <span class="prize-amount">1,000 SAR</span> · Funded by Abu Abdulaziz</div>
+  <div class="prize-banner">🏆 Grand Prize <span class="prize-amount">4,000 SAR</span></div>
 </div>
 
 <div class="ticker" id="ticker">
@@ -248,7 +248,7 @@ body>*{position:relative;z-index:1}
       <li>⚔️ Knockout picks open round by round after each stage</li>
       <li>🎯 Upset bonus applies to group stage AND all knockout rounds</li>
       <li>🏆 Tiebreaker: fewest correct results wins (rewards boldness)</li>
-      <li>💰 1,000 SAR prize provided by Abu Abdulaziz</li>
+      <li>💰 4,000 SAR grand prize for the winner</li>
     </ul>
   </div>
 </div>
@@ -266,6 +266,10 @@ body>*{position:relative;z-index:1}
   </div>
   <div id="adminPanel" style="display:none">
     <div class="section-header">🔧 Admin Panel</div>
+    <div class="alert alert-gold" style="margin-bottom:1rem">
+      ⚡ <strong>Fastest workflow:</strong> Use <strong>Today's Matches</strong> below to enter results as games finish. Points, tables, standings and bonuses update automatically the moment you save.
+    </div>
+    <div class="admin-section"><h3>⚡ Today's Matches — Quick Entry</h3><div id="todayMatchesAdmin"></div></div>
     <div class="admin-section"><h3>Registered Players</h3><div id="adminPlayers"></div>
       <div style="display:flex;gap:8px;margin-top:.6rem">
         <input id="addPlayerInput" class="text-input" placeholder="Add player name..." style="flex:1" onkeydown="if(event.key==='Enter')adminAddPlayer()">
@@ -274,15 +278,11 @@ body>*{position:relative;z-index:1}
     </div>
     <div class="admin-section"><h3>Stage Control</h3><div class="admin-grid" id="stageToggles"></div></div>
     <div class="admin-section"><h3>Knockout Fixtures</h3><div id="koFixtureAdmin"></div></div>
-    <div class="admin-section"><h3>Group Stage Results</h3><div id="groupResultsAdmin"></div></div>
+    <div class="admin-section"><h3>All Group Stage Results</h3><div id="groupResultsAdmin"></div></div>
     <div class="admin-section"><h3>Knockout Results</h3><div id="koResultsAdmin"></div></div>
-    <div class="admin-section"><h3>Bonus Points (Manual Award)</h3><div id="bonusPtsAdmin"></div></div>
-    <div class="alert alert-info" style="margin-bottom:.8rem">
-      🤖 <strong>Fully automatic</strong> — live scores, knockout fixtures, and bonus results are all fetched via web search automatically. Manual override below only if needed.
-    </div>
+    <div class="admin-section"><h3>Bonus Points (Golden Boot, Giant Killer, Dark Horse)</h3><div id="bonusPtsAdmin"></div></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:.8rem">
-      <button class="btn btn-gold" onclick="masterSync().then(()=>recalcAll())">⚡ Force Sync + Recalculate</button>
-      <button class="btn btn-outline btn-sm" onclick="recalcAll()">🔄 Recalculate Only</button>
+      <button class="btn btn-gold" onclick="recalcAll()">🔄 Recalculate All Points</button>
       <button class="btn btn-outline btn-sm" onclick="exportData()">📤 Export JSON</button>
     </div>
   </div>
@@ -1010,7 +1010,53 @@ function downloadCert(name,pts){
 
 // ─── ADMIN ────────────────────────────────────────────────────
 function checkAdminPw(){if(document.getElementById('adminPwInput').value==='watar2026'){adminUnlocked=true;document.getElementById('adminGate').style.display='none';document.getElementById('adminPanel').style.display='block';renderAdminPanel();}else toast('Wrong password ❌');}
-function renderAdminPanel(){renderAdminPlayers();renderAdminStageToggles();renderAdminKOFixtures();renderAdminGroupResults();renderAdminKOResults();renderAdminBonusPts();}
+function renderAdminPanel(){renderTodayMatches();renderAdminPlayers();renderAdminStageToggles();renderAdminKOFixtures();renderAdminGroupResults();renderAdminKOResults();renderAdminBonusPts();}
+
+function renderTodayMatches(){
+  const el=document.getElementById('todayMatchesAdmin');if(!el)return;
+  const now=Date.now();
+  // Matches that have kicked off and aren't far in the future — show kicked-off + upcoming-today
+  const relevant=[];
+  MATCHES.forEach((m,i)=>{
+    const ko=new Date(m.t).getTime();
+    const hoursFromNow=(ko-now)/3600000;
+    // Show matches that kicked off already OR kick off within next 18 hours
+    if(hoursFromNow<18){relevant.push({m,i,ko,started:now>=ko});}
+  });
+  relevant.sort((a,b)=>b.ko-a.ko);
+  const recent=relevant.slice(0,12);
+  if(!recent.length){el.innerHTML='<p style="color:var(--gray);font-size:13px">No matches kicked off yet. They\'ll appear here automatically as kickoff approaches.</p>';return;}
+  let html='<div style="font-size:12px;color:var(--gray);margin-bottom:.6rem">Most recent matches. Enter the final score and tap Save — everything updates instantly.</div>';
+  recent.forEach(({m,i,started})=>{
+    const key=`${m.g}_${i}`,r=appState.results?.group?.[key]||{};
+    const done=r.h!=null;
+    html+=`<div class="match-row" style="${done?'border:1px solid rgba(26,122,60,.4)':''}">
+      <span class="team-name right">${m.h}</span>
+      <input type="number" class="score-input" id="today_${key}_h" value="${r.h??''}" min="0" max="20" placeholder="-">
+      <span class="vs">–</span>
+      <input type="number" class="score-input" id="today_${key}_a" value="${r.a??''}" min="0" max="20" placeholder="-">
+      <span class="team-name">${m.a}</span>
+      <div class="match-meta">
+        <span class="time-badge">Group ${m.g} · ${formatKickoff(m.t)}</span>
+        ${done?'<span class="lock-badge" style="color:#4caf50;background:rgba(76,175,80,.1);border-color:rgba(76,175,80,.3)">✅ Saved</span>':started?'<span class="upset-badge">⚽ Awaiting result</span>':'<span class="time-badge" style="color:var(--gold)">Upcoming</span>'}
+        <button class="btn btn-green btn-sm" onclick="saveTodayMatch('${key}')">Save</button>
+      </div>
+    </div>`;
+  });
+  el.innerHTML=html;
+}
+
+async function saveTodayMatch(key){
+  const h=document.getElementById(`today_${key}_h`)?.value;
+  const a=document.getElementById(`today_${key}_a`)?.value;
+  if(h===''||a===''||h==null||a==null){toast('Enter both scores ⚠️');return;}
+  if(!appState.results.group)appState.results.group={};
+  appState.results.group[key]={h:parseInt(h),a:parseInt(a)};
+  await autoRecalc();
+  await saveAppState();
+  renderTodayMatches();renderStandings();renderWall();renderPredict();
+  toast('Result saved & points updated ✅');
+}
 function renderAdminPlayers(){const el=document.getElementById('adminPlayers'),players=appState.registeredPlayers||[];el.innerHTML=players.length?players.map((p,i)=>`<span class="player-chip">${p.name}<button onclick="adminRemovePlayer(${i})">×</button></span>`).join(''):`<p style="color:var(--gray);font-size:13px">No players yet.</p>`;}
 async function adminRemovePlayer(idx){const p=appState.registeredPlayers[idx];if(!p)return;if(!confirm(`Remove ${p.name}?`))return;appState.registeredPlayers.splice(idx,1);delete appState.playerPts[p.name];await saveAppState();renderAdminPlayers();toast(`${p.name} removed`);}
 async function adminAddPlayer(){const v=document.getElementById('addPlayerInput').value.trim();if(!v)return;if(appState.registeredPlayers.find(p=>p.name===v)){toast('Already exists');return;}appState.registeredPlayers.push({name:v,addedAt:new Date().toISOString()});if(!appState.playerPts[v])appState.playerPts[v]={pts:0,group:0,upset:0,bonus:0,ko:0};document.getElementById('addPlayerInput').value='';await saveAppState();renderAdminPlayers();toast(`${v} added ✅`);}
@@ -1056,54 +1102,7 @@ async function recalcAll(){
 function exportData(){const blob=new Blob([JSON.stringify(appState,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='wc2026_data.json';a.click();}
 function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2800);}
 
-// ─── LIVE SCORES ENGINE ───────────────────────────────────────
-let liveScoresFetching=false,lastFetchTime=0;
-const FETCH_INTERVAL=5*60*1000;
-
-async function fetchLiveScores(force=false){
-  if(liveScoresFetching)return;
-  if(!force&&Date.now()-lastFetchTime<FETCH_INTERVAL)return;
-  const now=Date.now();
-  const activeMatch=MATCHES.find(m=>{const ko=new Date(m.t).getTime();return now>=ko&&now<=ko+3*60*60*1000;});
-  const recentMatch=MATCHES.find(m=>{const ko=new Date(m.t).getTime();return now>ko+3*60*60*1000&&now<ko+6*60*60*1000;});
-  if(!activeMatch&&!recentMatch&&!force)return;
-  liveScoresFetching=true;
-  setSyncBar('syncing','⚽ Fetching live scores...');
-  try{
-    const today=new Date().toISOString().split('T')[0];
-    const prompt=`Search for FIFA World Cup 2026 match results today (${today}) and yesterday. Return ONLY a JSON object, no other text:\n{"results":[{"home":"Mexico","away":"South Africa","homeScore":2,"awayScore":1,"status":"FT"}]}\nStatus: "FT" full time, "LIVE_N" live at minute N, "NS" not started. Only include started/finished matches. If none: {"results":[]}`;
-    const response=await fetch('https://corsproxy.io/?url=https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1000,tools:[{type:'web_search_20250305',name:'web_search'}],messages:[{role:'user',content:prompt}]})});
-    const data=await response.json();
-    const textBlock=data.content?.find(b=>b.type==='text');
-    if(!textBlock)throw new Error('No text');
-    const raw=textBlock.text.replace(/```json|```/g,'').trim();
-    const jm=raw.match(/\{[\s\S]*\}/);
-    if(!jm)throw new Error('No JSON');
-    const parsed=JSON.parse(jm[0]);
-    const fetched=parsed.results||[];
-    if(!fetched.length){setSyncBar('','⚡ LIVE — No new results yet');lastFetchTime=Date.now();liveScoresFetching=false;return;}
-    let updatedCount=0;
-    fetched.forEach(r=>{
-      if(r.status!=='FT')return;
-      const idx=MATCHES.findIndex(m=>m.h.toLowerCase()===r.home.toLowerCase()&&m.a.toLowerCase()===r.away.toLowerCase());
-      if(idx===-1)return;
-      const m=MATCHES[idx],key=`${m.g}_${idx}`;
-      if(!appState.results.group)appState.results.group={};
-      const existing=appState.results.group[key];
-      if(!existing||existing.h!==r.homeScore||existing.a!==r.awayScore){appState.results.group[key]={h:r.homeScore,a:r.awayScore};updatedCount++;}
-    });
-    if(updatedCount>0){
-      await autoRecalc();
-      setSyncBar('',`✅ ${updatedCount} result${updatedCount>1?'s':''} updated`);
-      setTimeout(()=>setSyncBar('','⚡ LIVE — Watar Partners Internal'),3000);
-      addActivity(`🤖 Auto-sync: ${updatedCount} result${updatedCount>1?'s':''} fetched & points updated`);
-      saveAppState();renderStandings();renderWall();
-    }else setSyncBar('','⚡ LIVE — Scores up to date');
-    lastFetchTime=Date.now();
-  }catch(e){console.error('Live scores error:',e);setSyncBar('error','⚠️ Score sync failed');}
-  liveScoresFetching=false;
-}
-
+// ─── AUTO RECALC (runs after every result entry) ──────────────
 async function autoRecalc(){
   const players=appState.registeredPlayers||[];
   for(const p of players){
@@ -1129,64 +1128,16 @@ async function autoRecalc(){
   }
 }
 
-async function fetchKnockoutFixtures(stage,force=false){
-  const existing=appState.fixtures[stage]||[];
-  if(existing.length>0&&!force)return;
-  const stageReadyAfter={r32:'2026-06-28T00:00:00Z',r16:'2026-07-04T00:00:00Z',qf:'2026-07-08T00:00:00Z',sf:'2026-07-12T00:00:00Z',final:'2026-07-15T00:00:00Z'};
-  if(Date.now()<new Date(stageReadyAfter[stage]).getTime()&&!force)return;
-  setSyncBar('syncing',`Fetching ${KO_NAMES[stage]} fixtures...`);
-  try{
-    const prompt=`Search for confirmed FIFA World Cup 2026 ${KO_NAMES[stage]} fixtures. Return ONLY:\n{"fixtures":[{"home":"Brazil","away":"Morocco"}],"confirmed":true}\nIf not confirmed: {"fixtures":[],"confirmed":false}\nInclude all ${KO_COUNT[stage]} matches.`;
-    const response=await fetch('https://corsproxy.io/?url=https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1000,tools:[{type:'web_search_20250305',name:'web_search'}],messages:[{role:'user',content:prompt}]})});
-    const data=await response.json();
-    const textBlock=data.content?.find(b=>b.type==='text');
-    if(!textBlock)throw new Error('no text');
-    const raw=textBlock.text.replace(/```json|```/g,'').trim();
-    const jm=raw.match(/\{[\s\S]*\}/);
-    if(!jm)throw new Error('no json');
-    const parsed=JSON.parse(jm[0]);
-    if(!parsed.confirmed||!parsed.fixtures?.length){setSyncBar('','⚡ LIVE — '+KO_NAMES[stage]+' draw not yet confirmed');return;}
-    appState.fixtures[stage]=parsed.fixtures.map(f=>[f.home,f.away]);
-    appState.stages[stage]=true;
-    await saveAppState();
-    addActivity('Auto: '+KO_NAMES[stage]+' fixtures loaded — predictions now open!');
-    setSyncBar('','✅ '+KO_NAMES[stage]+' draw confirmed — go predict!');
-    setTimeout(()=>setSyncBar('','⚡ LIVE — Watar Partners Internal'),4000);
-    renderAll();toast(KO_NAMES[stage]+' fixtures loaded — go predict! ⚽');
-  }catch(e){console.error('KO fixtures error:',e);setSyncBar('','⚡ LIVE — Watar Partners Internal');}
-}
-
-async function fetchBonusResults(){
-  if(Date.now()<new Date('2026-07-01T00:00:00Z').getTime())return;
-  try{
-    const prompt=`Search for FIFA World Cup 2026 official tournament statistics. Return ONLY:\n{"goldenBoot":{"player":"Full Name","goals":7,"confirmed":true},"giantKiller":{"team":"Team Name","confirmed":true},"darkHorse":{"team":"Team Name","confirmed":true}}\nGiant Killer = highest-ranked team knocked out in R32. Dark Horse = most surprising Semi-Finalist. If not confirmed set confirmed:false.`;
-    const response=await fetch('https://corsproxy.io/?url=https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:600,tools:[{type:'web_search_20250305',name:'web_search'}],messages:[{role:'user',content:prompt}]})});
-    const data=await response.json();
-    const textBlock=data.content?.find(b=>b.type==='text');
-    if(!textBlock)return;
-    const raw=textBlock.text.replace(/```json|```/g,'').trim();
-    const jm=raw.match(/\{[\s\S]*\}/);if(!jm)return;
-    const stats=JSON.parse(jm[0]);let anyAwarded=false;
-    (appState.registeredPlayers||[]).forEach(p=>{
-      const ud=loadUserData(p.name),b=ud.bonusPicks||{};let extra=0,awarded=[];
-      if(stats.goldenBoot?.confirmed&&b.boot){const searched=stats.goldenBoot.player.toLowerCase();if(b.boot.toLowerCase().split(' ').some(w=>searched.includes(w)&&w.length>3)){extra+=20;awarded.push('Golden Boot +20');}}
-      if(stats.giantKiller?.confirmed&&b.giant){if(b.giant.toLowerCase()===stats.giantKiller.team.toLowerCase()){extra+=25;awarded.push('Giant Killer +25');}}
-      if(stats.darkHorse?.confirmed&&b.dark){if(b.dark.toLowerCase()===stats.darkHorse.team.toLowerCase()){extra+=30;awarded.push('Dark Horse +30');}}
-      if(awarded.length){if(!appState.manualBonus)appState.manualBonus={};appState.manualBonus[p.name]=(appState.manualBonus[p.name]||0)+extra;anyAwarded=true;addActivity('Auto bonus: '+p.name+' earned — '+awarded.join(', '));}
-    });
-    if(anyAwarded){await autoRecalc();await saveAppState();renderStandings();toast('Bonus predictions auto-graded! 🌟');}
-  }catch(e){console.error('Bonus results error:',e);}
-}
-
-async function masterSync(){
-  await fetchLiveScores();
-  for(const stage of KO_STAGES)await fetchKnockoutFixtures(stage);
-  await fetchBonusResults();
-}
-
-setInterval(()=>masterSync(),FETCH_INTERVAL);
-document.addEventListener('visibilitychange',()=>{if(!document.hidden)masterSync();});
-window.addEventListener('load',async()=>{await init();masterSync();});
+// ─── PERIODIC SYNC ────────────────────────────────────────────
+// Keeps the leaderboard, feed and standings fresh across all devices.
+// Results are entered by the admin; everything else calculates automatically.
+setInterval(async()=>{
+  await loadAppState();
+  if(document.getElementById('tab-standings')?.classList.contains('active'))renderStandings();
+  if(document.getElementById('tab-feed')?.classList.contains('active'))renderFeed();
+  if(document.getElementById('tab-wall')?.classList.contains('active'))renderWall();
+},60000);
+window.addEventListener('load',async()=>{await init();});
 </script>
 </body>
 </html>
