@@ -477,7 +477,43 @@ async function saveAppState(){
   localStorage.setItem('wc26_app',JSON.stringify(appState));
   try{
     setSyncBar('syncing','⏳ Saving...');
-    await fetch(BIN_URL,{method:'PUT',headers:{'Content-Type':'application/json','X-Master-Key':API_KEY},body:JSON.stringify(appState)});
+    // MERGE-SAFE SAVE: fetch latest server copy first, merge our changes in,
+    // so concurrent saves from other players never get wiped out.
+    let server={};
+    try{
+      const r=await fetch(BIN_URL+'/latest',{headers:{'X-Master-Key':API_KEY}});
+      const d=await r.json();
+      if(d.record)server=d.record;
+    }catch(e){/* server unreachable — fall through and save our copy */}
+
+    const merged={...server,...{}};
+    // Players: union of both lists by name
+    const allPlayers={};
+    (server.registeredPlayers||[]).forEach(p=>{if(p&&typeof p.name==='string')allPlayers[p.name]=p;});
+    (appState.registeredPlayers||[]).forEach(p=>{if(p&&typeof p.name==='string')allPlayers[p.name]=p;});
+    merged.registeredPlayers=Object.values(allPlayers);
+    // userData: merge maps; our current user's data wins for their own entry
+    merged.userData={...(server.userData||{}),...(appState.userData||{})};
+    if(currentUser&&appState.userData&&appState.userData[currentUser])merged.userData[currentUser]=appState.userData[currentUser];
+    // pins: union (never delete anyone's pin)
+    merged.pins={...(server.pins||{}),...(appState.pins||{})};
+    // playerPts & manualBonus: merge maps
+    merged.playerPts={...(server.playerPts||{}),...(appState.playerPts||{})};
+    merged.manualBonus={...(server.manualBonus||{}),...(appState.manualBonus||{})};
+    // results: deep-merge each stage so one admin save can't erase another's
+    merged.results={};
+    const stages=['group','r32','r16','qf','sf','final'];
+    stages.forEach(s=>{merged.results[s]={...((server.results||{})[s]||{}),...((appState.results||{})[s]||{})};});
+    // fixtures & stage toggles & feed: local (admin) copy wins; feed merged by recency
+    merged.fixtures=appState.fixtures||server.fixtures||{r32:[],r16:[],qf:[],sf:[],final:[]};
+    merged.stages=appState.stages||server.stages;
+    const feedAll=[...(appState.activityFeed||[]),...(server.activityFeed||[])];
+    const seen=new Set();
+    merged.activityFeed=feedAll.filter(f=>{const k=(f.msg||'')+(f.time||'');if(seen.has(k))return false;seen.add(k);return true;}).sort((a,b)=>(b.time||0)-(a.time||0)).slice(0,50);
+
+    appState=merged;
+    await fetch(BIN_URL,{method:'PUT',headers:{'Content-Type':'application/json','X-Master-Key':API_KEY},body:JSON.stringify(merged)});
+    localStorage.setItem('wc26_app',JSON.stringify(merged));
     setSyncBar('','✅ Saved');
     setTimeout(()=>setSyncBar('','⚡ LIVE — Watar Partners Internal'),2000);
   }catch(e){setSyncBar('error','⚠️ Save failed');}
