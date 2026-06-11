@@ -947,7 +947,7 @@ function renderFeed(){
   let html=`<div class="section-header">📡 Activity Feed</div><div class="card">`;
   if(!feed.length)html+=`<p style="color:var(--gray);text-align:center;padding:1.5rem;font-size:13px">No activity yet — be the first to submit picks!</p>`;
   else feed.slice(0,20).forEach(f=>{
-    const initials=(f.user||'?').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+    const initials=String(f.user||'?').split(' ').map(w=>w[0]||'').join('').slice(0,2).toUpperCase()||'?';
     html+=`<div class="feed-item">
       <div class="feed-avatar">${initials}</div>
       <div><div class="feed-text">${f.msg}</div><div class="feed-time">${timeAgo(f.time)}</div></div>
