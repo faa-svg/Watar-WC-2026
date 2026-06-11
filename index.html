@@ -1041,7 +1041,7 @@ async function fetchLiveScores(force=false){
   try{
     const today=new Date().toISOString().split('T')[0];
     const prompt=`Search for FIFA World Cup 2026 match results today (${today}) and yesterday. Return ONLY a JSON object, no other text:\n{"results":[{"home":"Mexico","away":"South Africa","homeScore":2,"awayScore":1,"status":"FT"}]}\nStatus: "FT" full time, "LIVE_N" live at minute N, "NS" not started. Only include started/finished matches. If none: {"results":[]}`;
-    const response=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1000,tools:[{type:'web_search_20250305',name:'web_search'}],messages:[{role:'user',content:prompt}]})});
+    const response=await fetch('https://corsproxy.io/?url=https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1000,tools:[{type:'web_search_20250305',name:'web_search'}],messages:[{role:'user',content:prompt}]})});
     const data=await response.json();
     const textBlock=data.content?.find(b=>b.type==='text');
     if(!textBlock)throw new Error('No text');
@@ -1106,7 +1106,7 @@ async function fetchKnockoutFixtures(stage,force=false){
   setSyncBar('syncing',`Fetching ${KO_NAMES[stage]} fixtures...`);
   try{
     const prompt=`Search for confirmed FIFA World Cup 2026 ${KO_NAMES[stage]} fixtures. Return ONLY:\n{"fixtures":[{"home":"Brazil","away":"Morocco"}],"confirmed":true}\nIf not confirmed: {"fixtures":[],"confirmed":false}\nInclude all ${KO_COUNT[stage]} matches.`;
-    const response=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1000,tools:[{type:'web_search_20250305',name:'web_search'}],messages:[{role:'user',content:prompt}]})});
+    const response=await fetch('https://corsproxy.io/?url=https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1000,tools:[{type:'web_search_20250305',name:'web_search'}],messages:[{role:'user',content:prompt}]})});
     const data=await response.json();
     const textBlock=data.content?.find(b=>b.type==='text');
     if(!textBlock)throw new Error('no text');
@@ -1129,7 +1129,7 @@ async function fetchBonusResults(){
   if(Date.now()<new Date('2026-07-01T00:00:00Z').getTime())return;
   try{
     const prompt=`Search for FIFA World Cup 2026 official tournament statistics. Return ONLY:\n{"goldenBoot":{"player":"Full Name","goals":7,"confirmed":true},"giantKiller":{"team":"Team Name","confirmed":true},"darkHorse":{"team":"Team Name","confirmed":true}}\nGiant Killer = highest-ranked team knocked out in R32. Dark Horse = most surprising Semi-Finalist. If not confirmed set confirmed:false.`;
-    const response=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:600,tools:[{type:'web_search_20250305',name:'web_search'}],messages:[{role:'user',content:prompt}]})});
+    const response=await fetch('https://corsproxy.io/?url=https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:600,tools:[{type:'web_search_20250305',name:'web_search'}],messages:[{role:'user',content:prompt}]})});
     const data=await response.json();
     const textBlock=data.content?.find(b=>b.type==='text');
     if(!textBlock)return;
