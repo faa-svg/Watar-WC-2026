@@ -460,7 +460,7 @@ async function loadAppState(){
       if(currentUser&&localUserData[currentUser])appState.userData[currentUser]={...appState.userData[currentUser],...localUserData[currentUser]};
     }
     if(Array.isArray(appState.registeredPlayers)){
-      appState.registeredPlayers=appState.registeredPlayers.filter(p=>p&&typeof p.name==='string'&&p.name.trim());
+      appState.registeredPlayers=cleanPlayers(appState.registeredPlayers);
     } else {appState.registeredPlayers=[];}
     if(!Array.isArray(appState.activityFeed))appState.activityFeed=[];
     if(!appState.userData)appState.userData={};
@@ -491,7 +491,7 @@ async function saveAppState(){
     const allPlayers={};
     (server.registeredPlayers||[]).forEach(p=>{if(p&&typeof p.name==='string')allPlayers[p.name]=p;});
     (appState.registeredPlayers||[]).forEach(p=>{if(p&&typeof p.name==='string')allPlayers[p.name]=p;});
-    merged.registeredPlayers=Object.values(allPlayers);
+    merged.registeredPlayers=cleanPlayers(Object.values(allPlayers));
     // userData: merge maps; our current user's data wins for their own entry
     merged.userData={...(server.userData||{}),...(appState.userData||{})};
     if(currentUser&&appState.userData&&appState.userData[currentUser])merged.userData[currentUser]=appState.userData[currentUser];
@@ -673,7 +673,11 @@ function renderPredict(){
 }
 
 function renderLoginScreen(el){
-  const players=appState.registeredPlayers||[];
+  // Show registered players PLUS anyone who exists on the leaderboard
+  // (recovers players whose registration was lost — they just tap their name and set a PIN again)
+  const regNames=new Set((appState.registeredPlayers||[]).map(p=>p.name.toLowerCase()));
+  const ghosts=Object.keys(appState.playerPts||{}).filter(n=>typeof n==='string'&&n.trim()&&!/^\d+$/.test(n.trim())&&!regNames.has(n.toLowerCase()));
+  const allNames=[...(appState.registeredPlayers||[]).map(p=>p.name),...ghosts].sort((a,b)=>a.localeCompare(b));
   el.innerHTML=`<div class="login-screen"><div class="login-card">
     <div class="icon">⚽</div><h2>Who's Playing?</h2>
     <p>Type your name to register or log in. New here? You'll set a 4-digit PIN. Returning? Just enter your PIN.</p>
@@ -681,14 +685,23 @@ function renderLoginScreen(el){
       <input id="selfRegName" class="text-input" placeholder="Your full name..." autocomplete="off" style="flex:1" onkeydown="if(event.key==='Enter')handleSelfReg()">
       <button class="btn btn-gold" onclick="handleSelfReg()">Go →</button>
     </div>
-    ${players.length?`<div style="margin-top:1rem;border-top:1px solid var(--border);padding-top:1rem"><div style="font-size:11px;color:var(--gray);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Or pick your name</div><div class="player-grid">${players.map((p,i)=>`<button class="player-btn" onclick="handlePlayerSelect(${i})">${p.name}</button>`).join('')}</div></div>`:''}
+    ${allNames.length?`<div style="margin-top:1rem;border-top:1px solid var(--border);padding-top:1rem"><div style="font-size:11px;color:var(--gray);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Or pick your name</div><div class="player-grid">${allNames.map(n=>`<button class="player-btn" onclick="handleNameSelect(this.textContent)">${n}</button>`).join('')}</div></div>`:''}
   </div></div>`;
   setTimeout(()=>document.getElementById('selfRegName')?.focus(),100);
+}
+
+function handleNameSelect(name){
+  name=String(name||'').trim();
+  if(!name)return;
+  const pin=getUserPin(name);
+  if(!pin){showPinSetup(name);}else{showPinEntry(name);}
 }
 
 function handleSelfReg(){
   const name=(document.getElementById('selfRegName')?.value||'').trim();
   if(!name){toast('Please enter your name ⚠️');return;}
+  if(/^\d+$/.test(name)){toast('Please enter your real name, not a number ⚠️');return;}
+  if(name.length<2){toast('Name is too short ⚠️');return;}
   const existing=appState.registeredPlayers.find(p=>String(p.name||'').toLowerCase()===name.toLowerCase());
   if(existing){
     const pin=getUserPin(existing.name);
