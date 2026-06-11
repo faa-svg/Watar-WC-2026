@@ -440,6 +440,11 @@ async function loadAppState(){
     const r=await fetch(BIN_URL+'/latest',{headers:{'X-Master-Key':API_KEY}});
     const d=await r.json();
     if(d.record)appState={...appState,...d.record};
+    // Clean any corrupt player entries (missing/non-string names)
+    if(Array.isArray(appState.registeredPlayers)){
+      appState.registeredPlayers=appState.registeredPlayers.filter(p=>p&&typeof p.name==='string'&&p.name.trim());
+    } else {appState.registeredPlayers=[];}
+    if(!Array.isArray(appState.activityFeed))appState.activityFeed=[];
     setSyncBar('','⚡ LIVE — Watar Partners Internal');
   }catch(e){
     setSyncBar('error','⚠️ Offline — cached data');
@@ -600,14 +605,11 @@ function renderLoginScreen(el){
 function handleSelfReg(){
   const name=(document.getElementById('selfRegName')?.value||'').trim();
   if(!name){toast('Please enter your name ⚠️');return;}
-  // Check if already registered
-  const existing=appState.registeredPlayers.find(p=>p.name.toLowerCase()===name.toLowerCase());
+  const existing=appState.registeredPlayers.find(p=>String(p.name||'').toLowerCase()===name.toLowerCase());
   if(existing){
-    // Existing player — go to PIN entry
     const pin=getUserPin(existing.name);
     if(!pin){showPinSetup(existing.name);}else{showPinEntry(existing.name);}
   } else {
-    // New player — register and set PIN
     showPinSetup(name);
   }
 }
