@@ -196,7 +196,10 @@ body>*{position:relative;z-index:1}
 
 <div class="ticker" id="ticker">
   <div><div class="ticker-label">Next Match</div><div class="ticker-match" id="tickerMatch">Loading...</div></div>
-  <div class="ticker-countdown" id="tickerCountdown">--:--:--</div>
+  <div style="display:flex;align-items:center;gap:12px">
+    <div class="ticker-countdown" id="tickerCountdown">--:--:--</div>
+    <button class="btn btn-gold btn-sm" id="refreshBtn" onclick="manualRefresh()">🔄 Refresh</button>
+  </div>
 </div>
 
 <div class="nav">
@@ -402,6 +405,10 @@ const KO_PTS={r32:8,r16:10,qf:12,sf:15,final:20};
 const KO_COUNT={r32:16,r16:8,qf:4,sf:2,final:1};
 const ALL_GROUPS=['A','B','C','D','E','F','G','H','I','J','K','L'];
 
+// ─── COUNTRY FLAGS ────────────────────────────────────────────
+const FLAGS={'Mexico':'🇲🇽','South Africa':'🇿🇦','South Korea':'🇰🇷','Czech Republic':'🇨🇿','Canada':'🇨🇦','Bosnia & Herzegovina':'🇧🇦','Qatar':'🇶🇦','Switzerland':'🇨🇭','Brazil':'🇧🇷','Morocco':'🇲🇦','Haiti':'🇭🇹','Scotland':'🏴󠁧󠁢󠁳󠁣󠁴󠁿','USA':'🇺🇸','Paraguay':'🇵🇾','Australia':'🇦🇺','Turkey':'🇹🇷','Germany':'🇩🇪','Curaçao':'🇨🇼','Ivory Coast':'🇨🇮','Ecuador':'🇪🇨','Netherlands':'🇳🇱','Japan':'🇯🇵','Sweden':'🇸🇪','Tunisia':'🇹🇳','Belgium':'🇧🇪','Egypt':'🇪🇬','Iran':'🇮🇷','New Zealand':'🇳🇿','Spain':'🇪🇸','Cape Verde':'🇨🇻','Saudi Arabia':'🇸🇦','Uruguay':'🇺🇾','France':'🇫🇷','Senegal':'🇸🇳','Iraq':'🇮🇶','Norway':'🇳🇴','Argentina':'🇦🇷','Algeria':'🇩🇿','Austria':'🇦🇹','Jordan':'🇯🇴','Portugal':'🇵🇹','DR Congo':'🇨🇩','Uzbekistan':'🇺🇿','Colombia':'🇨🇴','England':'🏴󠁧󠁢󠁥󠁮󠁧󠁿','Croatia':'🇭🇷','Ghana':'🇬🇭','Panama':'🇵🇦'};
+const fl=t=>FLAGS[t]?FLAGS[t]+' ':'';
+
 // ─── UPSET BONUS ─────────────────────────────────────────────
 function calcUpsetBonus(odds,outcome){
   let w=outcome==='h'?odds[0]:outcome==='a'?odds[2]:odds[1];
@@ -519,6 +526,17 @@ async function init(){
 }
 
 function renderAll(){renderPredict();renderStandings();renderH2H();renderWall();renderFeed();}
+
+// ─── MANUAL REFRESH ───────────────────────────────────────────
+async function manualRefresh(){
+  const btn=document.getElementById('refreshBtn');
+  if(btn){btn.disabled=true;btn.textContent='⏳ Refreshing...';}
+  await loadAppState();
+  renderAll();
+  if(adminUnlocked)renderAdminPanel();
+  if(btn){btn.textContent='✅ Updated';setTimeout(()=>{btn.textContent='🔄 Refresh';btn.disabled=false;},1500);}
+  toast('Latest scores & standings loaded ✅');
+}
 
 function showTab(id,btn){
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
@@ -688,11 +706,11 @@ function renderGroupStage(el,ud){
       const upsetBonus=isUpsetPick?calcUpsetBonus(m.o,p.h>p.a?'h':'a'):0;
       const allPicks=getAllPicksForMatch(key);
       html+=`<div class="match-row ${locked?'locked-match':''}">
-        <span class="team-name right">${m.h}</span>
+        <span class="team-name right">${fl(m.h)}${m.h}</span>
         <input type="number" class="score-input" id="gs_${key}_h" min="0" max="20" value="${p.h??''}" placeholder="0" ${locked?'disabled':''}>
         <span class="vs">–</span>
         <input type="number" class="score-input" id="gs_${key}_a" min="0" max="20" value="${p.a??''}" placeholder="0" ${locked?'disabled':''}>
-        <span class="team-name">${m.a}</span>
+        <span class="team-name">${m.a} ${FLAGS[m.a]||''}</span>
         <div class="match-meta">
           ${locked?`<span class="lock-badge">🔒 Locked</span>`:`<span class="time-badge">${formatKickoff(m.t)}</span>`}
           ${cd?`<span class="time-badge" style="color:var(--gold)">⏱ ${cd}</span>`:''}
@@ -822,11 +840,11 @@ function renderKOStage(el,ud,stage){
     const hBonus=calcKOUpsetBonus(hOdds,aOdds,true),aBonus=calcKOUpsetBonus(hOdds,aOdds,false);
     html+=`<div class="ko-match">
       <div class="ko-team ${sel===m[0]?'selected':''}" onclick="pickKO('${stage}',${i},'${m[0].replace(/'/g,"\\'")}')">
-        ${m[0]}${hBonus>0?`<span class="ko-odds">🎯 +${hBonus} upset bonus</span>`:''}
+        ${fl(m[0])}${m[0]}${hBonus>0?`<span class="ko-odds">🎯 +${hBonus} upset bonus</span>`:''}
       </div>
       <span class="vs">vs</span>
       <div class="ko-team ${sel===m[1]?'selected':''}" onclick="pickKO('${stage}',${i},'${m[1].replace(/'/g,"\\'")}')">
-        ${m[1]}${aBonus>0?`<span class="ko-odds">🎯 +${aBonus} upset bonus</span>`:''}
+        ${fl(m[1])}${m[1]}${aBonus>0?`<span class="ko-odds">🎯 +${aBonus} upset bonus</span>`:''}
       </div>
     </div>`;
   });
@@ -930,7 +948,7 @@ function renderH2H(){
     const badge=res?`<span style="font-size:10px;color:var(--gray)">${m.h} ${res.h}–${res.a} ${m.a}</span>`:'';
     html+=`<div class="h2h-row">
       <span class="h2h-pick ${same?'h2h-same':'h2h-diff'}">${mine?`${mine.h}–${mine.a}`:'—'}</span>
-      <div class="h2h-match">${m.h} vs ${m.a}<br>${badge}</div>
+      <div class="h2h-match">${fl(m.h)}${m.h} vs ${m.a} ${FLAGS[m.a]||''}<br>${badge}</div>
       <span class="h2h-pick ${same?'h2h-same':'h2h-diff'}" style="text-align:right">${theirs?`${theirs.h}–${theirs.a}`:'—'}</span>
     </div>`;
   });
