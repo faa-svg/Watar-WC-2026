@@ -564,7 +564,7 @@ async function init(){
   }
   renderAll();
   startTicker();
-  setInterval(async()=>{await loadAppState();renderStandings();renderFeed();},60000);
+  // background refresh handled by the global 5-minute sync
 }
 
 function renderAll(){renderPredict();renderStandings();renderH2H();renderWall();renderFeed();}
