@@ -993,12 +993,12 @@ function renderStandings(){
     html+=`<tr class="${isMe?'you-row':''}" style="cursor:pointer" onclick="selectH2HPlayer(${pidx})">
       <td><span class="rank-badge ${i===0?'rank-1':i===1?'rank-2':i===2?'rank-3':''}">${i+1}</span></td>
       <td>${p.name}${isMe?' <span style="color:var(--gold);font-size:10px">(you)</span>':''}${streakBadge}${boldBadge}</td>
-      <td>${p.group||0}</td><td style="color:var(--gold)">${p.upset||0}</td><td>${p.bonus||0}</td><td>${p.ko||0}</td>
+      <td>${p.group||0}</td><td style="color:var(--gold);text-decoration:underline dotted;cursor:help" onclick="event.stopPropagation();showUpsetDetail('${p.name.replace(/'/g,"\\'")}')">${p.upset||0}</td><td>${p.bonus||0}</td><td>${p.ko||0}</td>
       <td><span class="pts-badge">${p.pts||0}</span></td>
     </tr>`;
   });
   html+=`</tbody></table></div>
-    <p style="color:var(--gray);font-size:11px;text-align:center;margin-top:.5rem">🔥 = hot streak · 🎯 = bold upset picks · Tap a row to see head-to-head</p>`;
+    <p style="color:var(--gray);font-size:11px;text-align:center;margin-top:.5rem">🔥 = hot streak · 🎯 = bold upset picks · Tap the gold Upset number for its breakdown · Tap a row for head-to-head</p>`;
   el.innerHTML=html;
 }
 
