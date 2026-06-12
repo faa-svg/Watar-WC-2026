@@ -481,6 +481,7 @@ async function loadAppState(){
     if(appState.userData)Object.keys(appState.userData).forEach(k=>{if(/^\d+$/.test(String(k).trim()))delete appState.userData[k];});
     if(appState.pins)Object.keys(appState.pins).forEach(k=>{if(/^\d+$/.test(String(k).trim()))delete appState.pins[k];});
     if(!Array.isArray(appState.activityFeed))appState.activityFeed=[];
+    appState.activityFeed=cleanFeed(appState.activityFeed);
     if(!appState.userData)appState.userData={};
     if(!appState.pins)appState.pins={};
     setSyncBar('','⚡ LIVE — Watar Partners Internal');
@@ -536,7 +537,7 @@ async function saveAppState(){
     }
     const feedAll=[...(appState.activityFeed||[]),...(server.activityFeed||[])];
     const seen=new Set();
-    merged.activityFeed=feedAll.filter(f=>{const k=(f.msg||'')+(f.time||'');if(seen.has(k))return false;seen.add(k);return true;}).sort((a,b)=>(b.time||0)-(a.time||0)).slice(0,50);
+    merged.activityFeed=cleanFeed(feedAll.filter(f=>{const k=(f.msg||'')+(f.time||'');if(seen.has(k))return false;seen.add(k);return true;})).sort((a,b)=>(b.time||0)-(a.time||0)).slice(0,50);
 
     appState=merged;
     await fetch(BIN_URL,{method:'PUT',headers:{'Content-Type':'application/json','X-Master-Key':API_KEY},body:JSON.stringify(merged)});
@@ -1244,7 +1245,7 @@ async function autoRecalc(){
       const key=`${m.g}_${i}`,pick=ud.groupPicks[key],res=appState.results?.group?.[key];
       if(!pick||!res)return;
       const pR=+pick.h>+pick.a?'h':+pick.h<+pick.a?'a':'d',rR=+res.h>+res.a?'h':+res.h<+res.a?'a':'d';
-      if(pick.h===res.h&&pick.a===res.a)group+=8;else if(pR===rR)group+=3;
+      if(+pick.h===+res.h&&+pick.a===+res.a)group+=8;else if(pR===rR)group+=3;
       if(pR===rR)upset+=calcUpsetBonus(m.o,pR);
     });
     KO_STAGES.forEach(stage=>{
