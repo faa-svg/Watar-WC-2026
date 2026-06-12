@@ -1200,12 +1200,31 @@ function renderTodayMatches(){
   el.innerHTML=html;
 }
 
+// Announce landed upsets to the feed with full detail
+function announceUpsets(key,m,res){
+  const rR=+res.h>+res.a?'h':+res.h<+res.a?'a':'d';
+  (appState.registeredPlayers||[]).forEach(p=>{
+    const ud=loadUserData(p.name);
+    const pick=ud.groupPicks&&ud.groupPicks[key];
+    if(!pick)return;
+    const pR=+pick.h>+pick.a?'h':+pick.h<+pick.a?'a':'d';
+    if(pR!==rR)return;
+    const b=calcUpsetBonus(m.o,pR);
+    if(b<=0)return;
+    const what=pR==='d'?`the draw (${pick.h}–${pick.a})`:`${pR==='h'?m.h:m.a} to win (${pick.h}–${pick.a})`;
+    addActivity(`🎯 ${p.name} landed an upset — predicted ${what} in ${m.h} vs ${m.a} (ended ${res.h}–${res.a}) → +${b} pts`);
+  });
+}
+
 async function saveTodayMatch(key){
   const h=document.getElementById(`today_${key}_h`)?.value;
   const a=document.getElementById(`today_${key}_a`)?.value;
   if(h===''||a===''||h==null||a==null){toast('Enter both scores ⚠️');return;}
   if(!appState.results.group)appState.results.group={};
+  const wasNew=!appState.results.group[key];
   appState.results.group[key]={h:parseInt(h),a:parseInt(a)};
+  const idx=parseInt(key.split('_')[1]);
+  if(wasNew&&MATCHES[idx])announceUpsets(key,MATCHES[idx],appState.results.group[key]);
   await autoRecalc();
   await saveAppState();
   renderTodayMatches();renderStandings();renderWall();renderPredict();
