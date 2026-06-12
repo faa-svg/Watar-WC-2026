@@ -247,7 +247,7 @@ body>*{position:relative;z-index:1}
     <div class="card-title">📋 Key Rules</div>
     <ul style="list-style:none;display:flex;flex-direction:column;gap:8px;font-size:13px;color:#ccc;margin-top:.4rem">
       <li>⏱️ Group picks lock <strong>1 hour before each match</strong></li>
-      <li>🔒 Bonus picks lock at tournament kick-off (June 11)</li>
+      <li>🔒 Bonus picks lock <strong>Monday 15 June, 6:00 PM KSA</strong></li>
       <li>⚔️ Knockout picks open round by round after each stage</li>
       <li>🎯 Upset bonus applies to group stage AND all knockout rounds</li>
       <li>🏆 Tiebreaker: fewest correct results wins (rewards boldness)</li>
@@ -496,21 +496,30 @@ async function saveAppState(){
     (server.registeredPlayers||[]).forEach(p=>{if(p&&typeof p.name==='string')allPlayers[p.name]=p;});
     (appState.registeredPlayers||[]).forEach(p=>{if(p&&typeof p.name==='string')allPlayers[p.name]=p;});
     merged.registeredPlayers=cleanPlayers(Object.values(allPlayers));
-    // userData: merge maps; our current user's data wins for their own entry
-    merged.userData={...(server.userData||{}),...(appState.userData||{})};
+    // userData: SERVER WINS for everyone else (their copy is newer than our snapshot).
+    // Our local copy wins ONLY for the currently logged-in user's own entry.
+    merged.userData={...(appState.userData||{}),...(server.userData||{})};
     if(currentUser&&appState.userData&&appState.userData[currentUser])merged.userData[currentUser]=appState.userData[currentUser];
-    // pins: union (never delete anyone's pin)
-    merged.pins={...(server.pins||{}),...(appState.pins||{})};
+    // pins: server wins for others; ours wins for our own pin only
+    merged.pins={...(appState.pins||{}),...(server.pins||{})};
+    if(currentUser&&appState.pins&&appState.pins[currentUser])merged.pins[currentUser]=appState.pins[currentUser];
+    if(pinTargetPlayer&&appState.pins&&appState.pins[pinTargetPlayer])merged.pins[pinTargetPlayer]=appState.pins[pinTargetPlayer];
     // playerPts & manualBonus: merge maps
     merged.playerPts=cleanPtsMap({...(server.playerPts||{}),...(appState.playerPts||{})});
     merged.manualBonus=cleanPtsMap({...(server.manualBonus||{}),...(appState.manualBonus||{})});
-    // results: deep-merge each stage so one admin save can't erase another's
+    // results/fixtures/stages: the ADMIN's local copy wins (they enter results);
+    // for everyone else the server copy wins so stale data can't undo admin entries.
     merged.results={};
     const stages=['group','r32','r16','qf','sf','final'];
-    stages.forEach(s=>{merged.results[s]={...((server.results||{})[s]||{}),...((appState.results||{})[s]||{})};});
-    // fixtures & stage toggles & feed: local (admin) copy wins; feed merged by recency
-    merged.fixtures=appState.fixtures||server.fixtures||{r32:[],r16:[],qf:[],sf:[],final:[]};
-    merged.stages=appState.stages||server.stages;
+    if(adminUnlocked){
+      stages.forEach(s=>{merged.results[s]={...((server.results||{})[s]||{}),...((appState.results||{})[s]||{})};});
+      merged.fixtures=appState.fixtures||server.fixtures||{r32:[],r16:[],qf:[],sf:[],final:[]};
+      merged.stages=appState.stages||server.stages;
+    }else{
+      stages.forEach(s=>{merged.results[s]={...((appState.results||{})[s]||{}),...((server.results||{})[s]||{})};});
+      merged.fixtures=server.fixtures||appState.fixtures||{r32:[],r16:[],qf:[],sf:[],final:[]};
+      merged.stages=server.stages||appState.stages;
+    }
     const feedAll=[...(appState.activityFeed||[]),...(server.activityFeed||[])];
     const seen=new Set();
     merged.activityFeed=feedAll.filter(f=>{const k=(f.msg||'')+(f.time||'');if(seen.has(k))return false;seen.add(k);return true;}).sort((a,b)=>(b.time||0)-(a.time||0)).slice(0,50);
@@ -594,7 +603,8 @@ function showTab(id,btn){
 function startTicker(){
   function update(){
     const now=Date.now();
-    const next=MATCHES.find(m=>new Date(m.t).getTime()>now);
+    const upcoming=MATCHES.filter(m=>new Date(m.t).getTime()>now);
+    const next=upcoming.length?upcoming.reduce((a,b)=>new Date(a.t).getTime()<=new Date(b.t).getTime()?a:b):null;
     if(!next){document.getElementById('tickerMatch').textContent='Tournament Complete 🏆';document.getElementById('tickerCountdown').textContent='';return;}
     document.getElementById('tickerMatch').textContent=`${next.h} vs ${next.a} · Group ${next.g}`;
     const diff=new Date(next.t).getTime()-now;
@@ -845,10 +855,11 @@ function handleDropdownKey(e,id){
 function getSelectVal(id){return(window['_val_'+id]!==undefined?window['_val_'+id]:document.getElementById(id)?.value)||'';}
 
 function renderBonus(el,ud){
-  const b=ud.bonusPicks||{},locked=isMatchLocked(MATCHES[0].t);
+  const BONUS_DEADLINE='2026-06-15T15:00:00Z'; // Mon 15 Jun, 18:00 KSA
+  const b=ud.bonusPicks||{},locked=Date.now()>=new Date(BONUS_DEADLINE).getTime();
   el.innerHTML=`<div class="card"><div class="card-title">Bonus Predictions</div>
-    <div class="card-sub">Bold calls before the tournament. All lock at the first kick-off on June 11. Check ⭐ Scoring for full explanations.</div>
-    ${locked?`<div class="alert alert-red">🔒 Bonus picks are locked — tournament has started.</div>`:''}
+    <div class="card-sub">Bold calls for the tournament. Bonus picks close <strong style="color:var(--gold)">Monday 15 June, 6:00 PM KSA</strong>. Check ⭐ Scoring for full explanations.</div>
+    ${locked?`<div class="alert alert-red">🔒 Bonus picks are locked.</div>`:''}
     <div class="bonus-row"><label>🥇 Golden Boot — Which player will score the most goals?</label>
       <input class="bonus-input" id="bp_boot" value="${b.boot||''}" placeholder="Type any player name..." ${locked?'disabled':''} autocomplete="off"></div>
     <div class="bonus-row"><label>🎯 Giant Killer — Which big-name team exits in R32?</label>
