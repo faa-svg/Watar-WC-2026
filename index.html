@@ -297,6 +297,21 @@ body>*{position:relative;z-index:1}
       </div>
       <div id="obo_status" style="font-size:12px;color:#7ed9a0;margin-top:6px;min-height:16px"></div>
     </div>
+    <div class="admin-section"><h3>📥 Import & Merge Backup JSON</h3>
+      <div style="font-size:12px;color:var(--gray);margin-bottom:.6rem">Paste JSON from an old bin version or an Export file. Merges missing players, picks and PINs into current data — never overwrites anything that exists.</div>
+      <textarea id="importJson" class="text-input" style="min-height:90px;font-family:monospace;font-size:11px" placeholder='Paste JSON here...'></textarea>
+      <button class="btn btn-green btn-sm" style="margin-top:8px" onclick="importMergeJson()">Merge into Competition</button>
+      <div id="import_status" style="font-size:12px;color:#7ed9a0;margin-top:6px;min-height:16px"></div>
+      <div style="border-top:1px solid var(--border);margin-top:12px;padding-top:12px">
+        <div style="font-size:12px;color:var(--gold);font-weight:700;margin-bottom:6px">🚑 Rescue a specific user (e.g. someone who registered as a number)</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <input id="rescue_old" class="text-input" style="flex:1;min-width:90px" placeholder="Name in JSON (e.g. 7)">
+          <input id="rescue_new" class="text-input" style="flex:2;min-width:140px" placeholder="Their real name">
+          <button class="btn btn-gold btn-sm" onclick="rescueUser()">Rescue</button>
+        </div>
+        <div id="rescue_status" style="font-size:12px;color:#7ed9a0;margin-top:6px;min-height:16px"></div>
+      </div>
+    </div>
     <div class="admin-section"><h3>Bonus Points (Golden Boot, Giant Killer, Dark Horse)</h3><div id="bonusPtsAdmin"></div></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:.8rem">
       <button class="btn btn-gold" onclick="recalcAll()">🔄 Recalculate All Points</button>
