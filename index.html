@@ -787,9 +787,9 @@ function renderGroupStage(el,ud){
       const allPicks=getAllPicksForMatch(key);
       html+=`<div class="match-row ${locked?'locked-match':''}">
         <span class="team-name right">${fl(m.h)}${m.h}</span>
-        <input type="number" class="score-input" id="gs_${key}_h" min="0" max="20" value="${p.h??''}" placeholder="0" ${locked?'disabled':''}>
+        <input type="number" class="score-input" id="gs_${key}_h" min="0" max="20" value="${p.h??''}" placeholder="0" ${locked?'disabled':''} oninput="queueAutoSave()">
         <span class="vs">–</span>
-        <input type="number" class="score-input" id="gs_${key}_a" min="0" max="20" value="${p.a??''}" placeholder="0" ${locked?'disabled':''}>
+        <input type="number" class="score-input" id="gs_${key}_a" min="0" max="20" value="${p.a??''}" placeholder="0" ${locked?'disabled':''} oninput="queueAutoSave()">
         <span class="team-name">${m.a}${flAfter(m.a)}</span>
         <div class="match-meta">
           ${locked?`<span class="lock-badge">🔒 Locked</span>`:`<span class="time-badge">${formatKickoff(m.t)}</span>`}
@@ -818,10 +818,30 @@ function getAllPicksForMatch(key){
   return{total,hPct:Math.round(h/total*100),dPct:Math.round(d/total*100),aPct:Math.round(a/total*100)};
 }
 
-function saveGroupPicks(){
+// ─── AUTO-SAVE (no Save button needed) ───────────────────────
+let autoSaveTimer=null;
+function queueAutoSave(){
+  if(!currentUser)return;
+  clearTimeout(autoSaveTimer);
+  setSyncBar('syncing','✏️ Typing...');
+  autoSaveTimer=setTimeout(async()=>{
+    collectGroupPicks();
+    await sset_silent();
+  },1500);
+}
+function collectGroupPicks(){
   const ud=loadUserData(currentUser);
-  MATCHES.forEach((m,i)=>{const key=`${m.g}_${i}`;if(isMatchLocked(m.t))return;const h=document.getElementById(`gs_${key}_h`)?.value,a=document.getElementById(`gs_${key}_a`)?.value;if(h!==''&&a!=='')ud.groupPicks[key]={h:parseInt(h),a:parseInt(a)};});
+  MATCHES.forEach((m,i)=>{const key=`${m.g}_${i}`;if(isMatchLocked(m.t))return;const hEl=document.getElementById(`gs_${key}_h`),aEl=document.getElementById(`gs_${key}_a`);if(!hEl||!aEl)return;const h=hEl.value,a=aEl.value;if(h!==''&&a!=='')ud.groupPicks[key]={h:parseInt(h),a:parseInt(a)};});
   saveUserData(ud);
+}
+async function sset_silent(){
+  await saveAppState();
+  setSyncBar('','✅ Picks auto-saved');
+  setTimeout(()=>setSyncBar('','⚡ LIVE — Watar Partners Internal'),2000);
+}
+
+function saveGroupPicks(){
+  collectGroupPicks();
   addActivity(`${currentUser} updated their group stage picks`);
   saveAppState();
   toast('Group picks saved! ✅');
@@ -876,7 +896,7 @@ function renderBonus(el,ud){
     <div class="card-sub">Bold calls for the tournament. Bonus picks close <strong style="color:var(--gold)">Monday 15 June, 6:00 PM KSA</strong>. Check ⭐ Scoring for full explanations.</div>
     ${locked?`<div class="alert alert-red">🔒 Bonus picks are locked.</div>`:''}
     <div class="bonus-row"><label>🥇 Golden Boot — Which player will score the most goals?</label>
-      <input class="bonus-input" id="bp_boot" value="${b.boot||''}" placeholder="Type any player name..." ${locked?'disabled':''} autocomplete="off"></div>
+      <input class="bonus-input" id="bp_boot" value="${b.boot||''}" placeholder="Type any player name..." ${locked?'disabled':''} autocomplete="off" oninput="queueBonusAutoSave()"></div>
     <div class="bonus-row"><label>🎯 Giant Killer — Which big-name team exits in R32?</label>
       ${buildSearchSelect('bp_giant',GIANT_KILLER_TEAMS,'Search favourites...',b.giant||'',locked,'🔍')}</div>
     <div class="bonus-row"><label>🌟 Dark Horse — Which underdog reaches the Semi-Finals?</label>
@@ -933,7 +953,7 @@ function renderKOStage(el,ud,stage){
   el.innerHTML=html;
 }
 
-function pickKO(stage,i,team){const ud=loadUserData(currentUser);if(!ud.koPicks[stage])ud.koPicks[stage]={};ud.koPicks[stage][i]=team;saveUserData(ud);renderPredict();}
+function pickKO(stage,i,team){const ud=loadUserData(currentUser);if(!ud.koPicks[stage])ud.koPicks[stage]={};ud.koPicks[stage][i]=team;saveUserData(ud);renderPredict();clearTimeout(autoSaveTimer);autoSaveTimer=setTimeout(()=>sset_silent(),1200);}
 function saveKOPicks(stage){const ud=loadUserData(currentUser);saveUserData(ud);addActivity(`${currentUser} submitted ${KO_NAMES[stage]} picks`);saveAppState();toast(`${KO_NAMES[stage]} picks saved! ✅`);}
 
 // ─── STANDINGS ────────────────────────────────────────────────
