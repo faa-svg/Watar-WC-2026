@@ -452,9 +452,11 @@ let appState={
 };
 
 // ─── STORAGE ──────────────────────────────────────────────────
-const BIN_ID='6a2a7527f5f4af5e29dd94d1';
+const BIN_ID='6a2c8221f5f4af5e29e93799'; // v2 bin — clean home, old cached clients can't touch it
+const OLD_BIN_ID='6a2a7527f5f4af5e29dd94d1';
 const API_KEY='$2a$10$s5vg.B7vXqAl.GVoLFcs0O7m/HV5N.XYJRa4uZo.hAQ1Vbcm74DSC';
 const BIN_URL=`https://api.jsonbin.io/v3/b/${BIN_ID}`;
+const OLD_BIN_URL=`https://api.jsonbin.io/v3/b/${OLD_BIN_ID}`;
 
 function setSyncBar(s,m){const e=document.getElementById('syncBar');e.className='sync-bar '+(s||'');e.textContent=m||'⚡ LIVE — Watar Partners Internal';}
 
@@ -463,16 +465,26 @@ async function loadAppState(){
     setSyncBar('syncing','⏳ Syncing...');
     const r=await fetch(BIN_URL+'/latest',{headers:{'X-Master-Key':API_KEY}});
     const d=await r.json();
-    if(d.record){
-      const localUserData=appState.userData||{};
-      const localPins=appState.pins||{};
-      appState={...appState,...d.record};
-      // Merge: keep server data but don't lose the current user's in-progress local picks
-      appState.userData=appState.userData||{};
-      appState.pins={...localPins,...(appState.pins||{})};
-      // Ensure current user's saved picks aren't dropped by an older server copy
-      if(currentUser&&localUserData[currentUser])appState.userData[currentUser]={...appState.userData[currentUser],...localUserData[currentUser]};
+    let rec=d.record||{};
+    // ONE-TIME MIGRATION: if the new bin hasn't been seeded yet, pull everything from the old bin
+    if(!rec.migratedFromV1){
+      try{
+        const ro=await fetch(OLD_BIN_URL+'/latest',{headers:{'X-Master-Key':API_KEY}});
+        const dOld=await ro.json();
+        const old=dOld.record||{};
+        rec={...old,...rec,migratedFromV1:true};
+        // union players from both, keep all userData/pins/points from old
+        rec.registeredPlayers=[...(old.registeredPlayers||[]),...(d.record?.registeredPlayers||[])];
+        rec.userData={...(old.userData||{}),...(d.record?.userData||{})};
+        rec.pins={...(old.pins||{}),...(d.record?.pins||{})};
+        rec.playerPts={...(old.playerPts||{}),...(d.record?.playerPts||{})};
+        await fetch(BIN_URL,{method:'PUT',headers:{'Content-Type':'application/json','X-Master-Key':API_KEY},body:JSON.stringify(rec)});
+      }catch(e){console.error('Migration skipped:',e);}
     }
+    const localUserData=appState.userData||{};
+    appState={...appState,...rec};
+    appState.userData=appState.userData||{};
+    if(currentUser&&localUserData[currentUser])appState.userData[currentUser]={...appState.userData[currentUser],...localUserData[currentUser]};
     if(Array.isArray(appState.registeredPlayers)){
       appState.registeredPlayers=cleanPlayers(appState.registeredPlayers);
     } else {appState.registeredPlayers=[];}
@@ -705,7 +717,10 @@ function renderLoginScreen(el){
   // Show registered players PLUS anyone who exists on the leaderboard
   // (recovers players whose registration was lost — they just tap their name and set a PIN again)
   const regNames=new Set((appState.registeredPlayers||[]).map(p=>p.name.toLowerCase()));
-  const ghosts=Object.keys(appState.playerPts||{}).filter(n=>typeof n==='string'&&n.trim()&&!/^\d+$/.test(n.trim())&&!regNames.has(n.toLowerCase()));
+  const ghostsPts=Object.keys(appState.playerPts||{});
+  const ghostsPins=Object.keys(appState.pins||{});
+  const ghostsData=Object.keys(appState.userData||{});
+  const ghosts=[...new Set([...ghostsPts,...ghostsPins,...ghostsData])].filter(n=>typeof n==='string'&&n.trim()&&!/^\d+$/.test(n.trim())&&!regNames.has(n.toLowerCase()));
   const allNames=[...(appState.registeredPlayers||[]).map(p=>p.name),...ghosts].sort((a,b)=>a.localeCompare(b));
   el.innerHTML=`<div class="login-screen"><div class="login-card">
     <div class="icon">⚽</div><h2>Who's Playing?</h2>
