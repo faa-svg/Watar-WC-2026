@@ -283,6 +283,20 @@ body>*{position:relative;z-index:1}
     <div class="admin-section"><h3>Knockout Fixtures</h3><div id="koFixtureAdmin"></div></div>
     <div class="admin-section"><h3>All Group Stage Results</h3><div id="groupResultsAdmin"></div></div>
     <div class="admin-section"><h3>Knockout Results</h3><div id="koResultsAdmin"></div></div>
+    <div class="admin-section"><h3>🛠️ Enter Pick on Behalf of a Player</h3>
+      <div style="font-size:12px;color:var(--gray);margin-bottom:.6rem">For recovering wiped picks (with written proof). Works even for locked matches. The pick scores normally through the Group column.</div>
+      <div style="display:grid;gap:8px">
+        <select class="text-input" id="obo_player"></select>
+        <select class="text-input" id="obo_match"></select>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input type="number" class="score-input" id="obo_h" min="0" max="20" placeholder="0">
+          <span class="vs">–</span>
+          <input type="number" class="score-input" id="obo_a" min="0" max="20" placeholder="0">
+          <button class="btn btn-green btn-sm" onclick="saveOboPick()">Save Pick</button>
+        </div>
+      </div>
+      <div id="obo_status" style="font-size:12px;color:#7ed9a0;margin-top:6px;min-height:16px"></div>
+    </div>
     <div class="admin-section"><h3>Bonus Points (Golden Boot, Giant Killer, Dark Horse)</h3><div id="bonusPtsAdmin"></div></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:.8rem">
       <button class="btn btn-gold" onclick="recalcAll()">🔄 Recalculate All Points</button>
@@ -1094,7 +1108,42 @@ function downloadCert(name,pts){
 
 // ─── ADMIN ────────────────────────────────────────────────────
 function checkAdminPw(){if(document.getElementById('adminPwInput').value==='watar2026'){adminUnlocked=true;document.getElementById('adminGate').style.display='none';document.getElementById('adminPanel').style.display='block';renderAdminPanel();}else toast('Wrong password ❌');}
-function renderAdminPanel(){renderTodayMatches();renderAdminPlayers();renderAdminStageToggles();renderAdminKOFixtures();renderAdminGroupResults();renderAdminKOResults();renderAdminBonusPts();}
+function renderAdminPanel(){renderTodayMatches();renderAdminPlayers();renderAdminStageToggles();renderAdminKOFixtures();renderAdminGroupResults();renderAdminKOResults();renderAdminBonusPts();renderOboTool();}
+
+function renderOboTool(){
+  const pSel=document.getElementById('obo_player'),mSel=document.getElementById('obo_match');
+  if(!pSel||!mSel)return;
+  pSel.innerHTML='<option value="">Select player...</option>'+(appState.registeredPlayers||[]).map(p=>`<option value="${p.name}">${p.name}</option>`).join('');
+  mSel.innerHTML='<option value="">Select match...</option>'+MATCHES.map((m,i)=>`<option value="${i}">Group ${m.g}: ${m.h} vs ${m.a}</option>`).join('');
+}
+
+async function saveOboPick(){
+  const name=document.getElementById('obo_player')?.value;
+  const idx=document.getElementById('obo_match')?.value;
+  const h=document.getElementById('obo_h')?.value,a=document.getElementById('obo_a')?.value;
+  const status=document.getElementById('obo_status');
+  if(!name||idx===''||h===''||a===''){if(status)status.textContent='⚠️ Fill all fields';return;}
+  const m=MATCHES[parseInt(idx)];
+  const key=`${m.g}_${parseInt(idx)}`;
+  if(status)status.textContent='⏳ Saving...';
+  try{
+    // Atomic-style save: fetch latest, modify ONLY this player's pick, save back
+    const r=await fetch(BIN_URL+'/latest',{headers:{'X-Master-Key':API_KEY}});
+    const d=await r.json();
+    const server=d.record||{};
+    if(!server.userData)server.userData={};
+    if(!server.userData[name])server.userData[name]={name,groupPicks:{},bonusPicks:{},koPicks:{}};
+    if(!server.userData[name].groupPicks)server.userData[name].groupPicks={};
+    server.userData[name].groupPicks[key]={h:parseInt(h),a:parseInt(a)};
+    await fetch(BIN_URL,{method:'PUT',headers:{'Content-Type':'application/json','X-Master-Key':API_KEY},body:JSON.stringify(server)});
+    appState={...appState,...server};
+    await autoRecalc();
+    await saveAppState();
+    renderStandings();
+    if(status)status.textContent=`✅ Saved: ${name} → ${m.h} ${h}–${a} ${m.a} (points recalculated)`;
+    toast('Pick saved on behalf of '+name+' ✅');
+  }catch(e){if(status)status.textContent='⚠️ Save failed — try again';}
+}
 
 function renderTodayMatches(){
   const el=document.getElementById('todayMatchesAdmin');if(!el)return;
