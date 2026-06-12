@@ -1066,7 +1066,8 @@ function renderWall(){
   if(!hasResults){el.innerHTML=html+`<div class="card" style="text-align:center;padding:2rem;color:var(--gray)">Wall comes alive once matches start and results are in. Check back soon!</div>`;return;}
   const players=appState.registeredPlayers||[];
   const fame=[],shame=[];
-  players.forEach(name=>{
+  players.forEach(pl=>{
+    const name=pl.name;
     const ud=loadUserData(name);
     MATCHES.forEach((m,i)=>{
       const key=`${m.g}_${i}`,pick=ud.groupPicks[key],res=groupResults[key];
