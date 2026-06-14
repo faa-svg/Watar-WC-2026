@@ -503,10 +503,14 @@ async function loadAppState(){
     if(Array.isArray(appState.registeredPlayers)){
       appState.registeredPlayers=cleanPlayers(appState.registeredPlayers);
     } else {appState.registeredPlayers=[];}
+    // Ensure anyone who has picks/pins/points is also in the registered list (incl. numeric-named real players)
+    const regset=new Set(appState.registeredPlayers.map(p=>String(p.name).toLowerCase()));
+    [...Object.keys(appState.userData||{}),...Object.keys(appState.pins||{}),...Object.keys(appState.playerPts||{})].forEach(n=>{
+      const nm=String(n).trim();
+      if(nm&&!regset.has(nm.toLowerCase())){appState.registeredPlayers.push({name:nm});regset.add(nm.toLowerCase());}
+    });
     appState.playerPts=cleanPtsMap(appState.playerPts);
     appState.manualBonus=cleanPtsMap(appState.manualBonus);
-    if(appState.userData)Object.keys(appState.userData).forEach(k=>{if(/^\d+$/.test(String(k).trim()))delete appState.userData[k];});
-    if(appState.pins)Object.keys(appState.pins).forEach(k=>{if(/^\d+$/.test(String(k).trim()))delete appState.pins[k];});
     if(!Array.isArray(appState.activityFeed))appState.activityFeed=[];
     appState.activityFeed=cleanFeed(appState.activityFeed);
     if(!appState.userData)appState.userData={};
@@ -738,7 +742,7 @@ function renderLoginScreen(el){
   const ghostsPts=Object.keys(appState.playerPts||{});
   const ghostsPins=Object.keys(appState.pins||{});
   const ghostsData=Object.keys(appState.userData||{});
-  const ghosts=[...new Set([...ghostsPts,...ghostsPins,...ghostsData])].filter(n=>typeof n==='string'&&n.trim()&&!/^\d+$/.test(n.trim())&&!regNames.has(n.toLowerCase()));
+  const ghosts=[...new Set([...ghostsPts,...ghostsPins,...ghostsData])].filter(n=>typeof n==='string'&&n.trim()&&!regNames.has(n.toLowerCase()));
   const allNames=[...(appState.registeredPlayers||[]).map(p=>p.name),...ghosts].sort((a,b)=>a.localeCompare(b));
   el.innerHTML=`<div class="login-screen"><div class="login-card">
     <div class="icon">⚽</div><h2>Who's Playing?</h2>
@@ -1001,7 +1005,7 @@ function getStreak(name){
 
 function renderStandings(){
   const el=document.getElementById('tab-standings');
-  const rows=Object.entries(appState.playerPts||{}).filter(([name])=>{const n=String(name).trim();return n&&!/^\d+$/.test(n);}).map(([name,d])=>({name,...d})).sort((a,b)=>b.pts-a.pts);
+  const rows=Object.entries(appState.playerPts||{}).filter(([name])=>String(name).trim()!=='').map(([name,d])=>({name,...d})).sort((a,b)=>b.pts-a.pts);
   let html=`<div class="section-header">🏆 Leaderboard</div>`;
   const allDone=appState.stages.final===false&&rows.length>0&&(appState.results?.final||{})['0'];
   if(allDone&&rows[0]){
