@@ -591,28 +591,15 @@ async function saveAppState(){
 
 function loadUserData(n){
   if(!appState.userData)appState.userData={};
-  // ALWAYS prefer the shared cloud copy (so H2H, scoring, distribution see everyone).
   if(appState.userData[n])return JSON.parse(JSON.stringify(appState.userData[n]));
-  // Only fall back to local cache for the CURRENT user (their own in-progress work).
-  if(n===currentUser){
-    try{const r=localStorage.getItem('wc26_u_'+n);if(r)return JSON.parse(r);}catch(e){}
-  }
   return{name:n,groupPicks:{},bonusPicks:{},koPicks:{}};
 }
 function saveUserData(ud){
   if(!appState.userData)appState.userData={};
   appState.userData[ud.name]=ud;
-  localStorage.setItem('wc26_u_'+ud.name,JSON.stringify(ud));
 }
-function getUserPin(n){
-  if(appState.pins&&appState.pins[n])return appState.pins[n];
-  return localStorage.getItem('wc26_pin_'+n)||null;
-}
-function setUserPin(n,pin){
-  if(!appState.pins)appState.pins={};
-  appState.pins[n]=pin;
-  localStorage.setItem('wc26_pin_'+n,pin);
-}
+function getUserPin(n){return (appState.pins||{})[n]||null;}
+function setUserPin(n,pin){if(!appState.pins)appState.pins={};appState.pins[n]=pin;}
 function loadMyName(){return localStorage.getItem('wc26_myname')||null;}
 function saveMyName(n){localStorage.setItem('wc26_myname',n);}
 
@@ -700,16 +687,16 @@ function updatePinDots(){for(let i=0;i<4;i++)document.getElementById('pd'+i).cla
 function submitPin(){
   if(pinMode==='setup'){
     setUserPin(pinTargetPlayer,pinBuffer);
-    // Add to registered players if not already there
     if(!appState.registeredPlayers.find(p=>p.name===pinTargetPlayer)){
       appState.registeredPlayers.push({name:pinTargetPlayer,addedAt:new Date().toISOString()});
-      if(!appState.playerPts[pinTargetPlayer])appState.playerPts[pinTargetPlayer]={pts:0,group:0,upset:0,bonus:0,ko:0};
     }
+    if(!appState.userData[pinTargetPlayer])appState.userData[pinTargetPlayer]={name:pinTargetPlayer,groupPicks:{},bonusPicks:{},koPicks:{}};
     currentUser=pinTargetPlayer;
     document.getElementById('pinScreen').style.display='none';
     saveMyName(pinTargetPlayer);
     addActivity(`${pinTargetPlayer} joined the competition 🎉`);
-    saveAppState();
+    savePlayerRow(pinTargetPlayer);
+    saveSetting('activityFeed',appState.activityFeed);
     renderAll();
     toast(`PIN set! Welcome, ${pinTargetPlayer} 🎉`);
   }else{
@@ -883,16 +870,21 @@ function collectGroupPicks(){
   saveUserData(ud);
 }
 async function sset_silent(){
-  await saveAppState();
-  setSyncBar('','✅ Picks auto-saved');
+  if(!currentUser)return;
+  const ok=await savePlayerRow(currentUser);
+  setSyncBar('',ok?'✅ Picks auto-saved':'⚠️ Save retry...');
+  if(!ok){setTimeout(()=>savePlayerRow(currentUser),2000);}
   setTimeout(()=>setSyncBar('','⚡ LIVE — Watar Partners Internal'),2000);
 }
 
 function saveGroupPicks(){
   collectGroupPicks();
   addActivity(`${currentUser} updated their group stage picks`);
-  saveAppState();
-  toast('Group picks saved! ✅');
+  savePlayerRow(currentUser).then(ok=>{
+    toast(ok?'Group picks saved! ✅':'Save failed — trying again');
+    if(!ok)setTimeout(()=>savePlayerRow(currentUser),2000);
+  });
+  saveSetting('activityFeed',appState.activityFeed);
   renderPredict();
 }
 
@@ -972,8 +964,8 @@ function saveBonusPicks(){
   ud.bonusPicks={boot,giant,dark,high,fin_h,fin_a,fin_sh:document.getElementById('bp_fin_sh').value,fin_sa:document.getElementById('bp_fin_sa').value};
   saveUserData(ud);
   addActivity(`${currentUser} submitted their bonus picks 🌟`);
-  saveAppState();
-  toast('Bonus picks saved! ✅');
+  savePlayerRow(currentUser).then(ok=>toast(ok?'Bonus picks saved! ✅':'Save failed — trying again'));
+  saveSetting('activityFeed',appState.activityFeed);
 }
 
 // ─── KO STAGE ─────────────────────────────────────────────────
@@ -1001,8 +993,7 @@ function renderKOStage(el,ud,stage){
   el.innerHTML=html;
 }
 
-function pickKO(stage,i,team){const ud=loadUserData(currentUser);if(!ud.koPicks[stage])ud.koPicks[stage]={};ud.koPicks[stage][i]=team;saveUserData(ud);renderPredict();clearTimeout(autoSaveTimer);autoSaveTimer=setTimeout(()=>sset_silent(),1200);}
-function saveKOPicks(stage){const ud=loadUserData(currentUser);saveUserData(ud);addActivity(`${currentUser} submitted ${KO_NAMES[stage]} picks`);saveAppState();toast(`${KO_NAMES[stage]} picks saved! ✅`);}
+function pickKO(stage,i,team){const ud=loadUserData(currentUser);if(!ud.koPicks[stage])ud.koPicks[stage]={};ud.koPicks[stage][i]=team;saveUserData(ud);renderPredict();clearTimeout(autoSaveTimer);autoSaveTimer=setTimeout(()=>sset_silent(),1200);}function saveKOPicks(stage){const ud=loadUserData(currentUser);saveUserData(ud);addActivity(`${currentUser} submitted ${KO_NAMES[stage]} picks`);savePlayerRow(currentUser).then(ok=>toast(ok?`${KO_NAMES[stage]} picks saved! ✅`:'Save failed — trying again'));saveSetting('activityFeed',appState.activityFeed);}
 
 // ─── STANDINGS ────────────────────────────────────────────────
 function getStreak(name){
@@ -1196,23 +1187,12 @@ async function saveOboPick(){
   const m=MATCHES[parseInt(idx)];
   const key=`${m.g}_${parseInt(idx)}`;
   if(status)status.textContent='⏳ Saving...';
-  try{
-    // Atomic-style save: fetch latest, modify ONLY this player's pick, save back
-    const r=await fetch(BIN_URL+'/latest',{headers:{'X-Master-Key':API_KEY}});
-    const d=await r.json();
-    const server=d.record||{};
-    if(!server.userData)server.userData={};
-    if(!server.userData[name])server.userData[name]={name,groupPicks:{},bonusPicks:{},koPicks:{}};
-    if(!server.userData[name].groupPicks)server.userData[name].groupPicks={};
-    server.userData[name].groupPicks[key]={h:parseInt(h),a:parseInt(a)};
-    await fetch(BIN_URL,{method:'PUT',headers:{'Content-Type':'application/json','X-Master-Key':API_KEY},body:JSON.stringify(server)});
-    appState={...appState,...server};
-    await autoRecalc();
-    await saveAppState();
-    renderStandings();
-    if(status)status.textContent=`✅ Saved: ${name} → ${m.h} ${h}–${a} ${m.a} (points recalculated)`;
-    toast('Pick saved on behalf of '+name+' ✅');
-  }catch(e){if(status)status.textContent='⚠️ Save failed — try again';}
+  if(!appState.userData[name])appState.userData[name]={name,groupPicks:{},bonusPicks:{},koPicks:{}};
+  appState.userData[name].groupPicks[key]={h:parseInt(h),a:parseInt(a)};
+  const ok=await savePlayerRow(name);
+  recomputePoints();renderStandings();
+  if(status)status.textContent=ok?`✅ Saved: ${name} → ${m.h} ${h}–${a} ${m.a}`:'⚠️ Save failed';
+  toast('Pick saved on behalf of '+name+' ✅');
 }
 
 function renderTodayMatches(){
@@ -1274,25 +1254,26 @@ async function saveTodayMatch(key){
   appState.results.group[key]={h:parseInt(h),a:parseInt(a)};
   const idx=parseInt(key.split('_')[1]);
   if(wasNew&&MATCHES[idx])announceUpsets(key,MATCHES[idx],appState.results.group[key]);
-  await autoRecalc();
-  await saveAppState();
+  const ok=await saveResultRow(key,parseInt(h),parseInt(a));
+  await saveSetting('activityFeed',appState.activityFeed);
+  recomputePoints();
   renderTodayMatches();renderStandings();renderWall();renderPredict();
-  toast('Result saved & points updated ✅');
+  toast(ok?'Result saved & points updated ✅':'⚠️ Save failed — try again');
 }
 function renderAdminPlayers(){const el=document.getElementById('adminPlayers'),players=appState.registeredPlayers||[];el.innerHTML=players.length?players.map((p,i)=>`<span class="player-chip">${p.name}<button onclick="adminRemovePlayer(${i})">×</button></span>`).join(''):`<p style="color:var(--gray);font-size:13px">No players yet.</p>`;}
 async function adminRemovePlayer(idx){const p=appState.registeredPlayers[idx];if(!p)return;if(!confirm(`Remove ${p.name}?`))return;appState.registeredPlayers.splice(idx,1);delete appState.playerPts[p.name];await saveAppState();renderAdminPlayers();toast(`${p.name} removed`);}
 async function adminAddPlayer(){const v=document.getElementById('addPlayerInput').value.trim();if(!v)return;if(appState.registeredPlayers.find(p=>p.name===v)){toast('Already exists');return;}appState.registeredPlayers.push({name:v,addedAt:new Date().toISOString()});if(!appState.playerPts[v])appState.playerPts[v]={pts:0,group:0,upset:0,bonus:0,ko:0};document.getElementById('addPlayerInput').value='';await saveAppState();renderAdminPlayers();toast(`${v} added ✅`);}
 async function adminRemovePlayer(name){if(!confirm(`Remove ${name}?`))return;appState.registeredPlayers=appState.registeredPlayers.filter(p=>p.name!==name);await saveAppState();renderAdminPlayers();toast(`${name} removed`);}
 function renderAdminStageToggles(){document.getElementById('stageToggles').innerHTML=[{id:'group',label:'Group Stage'},{id:'bonus',label:'Bonus Picks'},{id:'r32',label:'Round of 32'},{id:'r16',label:'Round of 16'},{id:'qf',label:'Quarter-Finals'},{id:'sf',label:'Semi-Finals'},{id:'final',label:'Final'}].map(s=>`<div class="admin-row"><label>${s.label}</label><label class="toggle"><input type="checkbox" ${appState.stages[s.id]?'checked':''} onchange="toggleStage('${s.id}',this.checked)"><span class="toggle-slider"></span></label></div>`).join('');}
-async function toggleStage(id,val){appState.stages[id]=val;await saveAppState();toast(`${id} ${val?'opened':'closed'} ✅`);}
+async function toggleStage(id,val){appState.stages[id]=val;await saveSetting('stages',appState.stages);toast(`${id} ${val?'opened':'closed'} ✅`);}
 function renderAdminKOFixtures(){let html='';KO_STAGES.forEach(stage=>{const cnt=KO_COUNT[stage],fx=appState.fixtures[stage]||[];html+=`<div style="margin-bottom:1rem"><div style="font-size:11px;color:var(--gold);font-weight:700;margin-bottom:5px">${KO_NAMES[stage]}</div>`;for(let i=0;i<cnt;i++){const m=fx[i]||['',''];html+=`<div style="display:flex;gap:5px;margin-bottom:3px"><input class="text-input" id="fix_${stage}_${i}_h" value="${m[0]}" placeholder="Team A" style="flex:1;padding:6px"><span style="align-self:center;color:var(--gray);font-size:11px">vs</span><input class="text-input" id="fix_${stage}_${i}_a" value="${m[1]}" placeholder="Team B" style="flex:1;padding:6px"></div>`;}html+=`<button class="btn btn-outline btn-sm" onclick="saveFixtures('${stage}',${cnt})">Save ${KO_NAMES[stage]}</button></div>`;});document.getElementById('koFixtureAdmin').innerHTML=html;}
-async function saveFixtures(stage,cnt){const fx=[];for(let i=0;i<cnt;i++){const h=document.getElementById(`fix_${stage}_${i}_h`)?.value.trim(),a=document.getElementById(`fix_${stage}_${i}_a`)?.value.trim();if(h&&a)fx.push([h,a]);}appState.fixtures[stage]=fx;await saveAppState();renderAdminKOResults();toast(`${KO_NAMES[stage]} fixtures saved ✅`);}
+async function saveFixtures(stage,cnt){const fx=[];for(let i=0;i<cnt;i++){const h=document.getElementById(`fix_${stage}_${i}_h`)?.value.trim(),a=document.getElementById(`fix_${stage}_${i}_a`)?.value.trim();if(h&&a)fx.push([h,a]);}appState.fixtures[stage]=fx;await saveSetting('fixtures',appState.fixtures);renderAdminKOResults();toast(`${KO_NAMES[stage]} fixtures saved ✅`);}
 function renderAdminGroupResults(){let html='';ALL_GROUPS.forEach(grp=>{html+=`<div style="margin-bottom:1rem"><div style="font-size:11px;color:var(--gold);font-weight:700;margin-bottom:5px">Group ${grp}</div>`;(GROUP_MATCHES[grp]||[]).forEach(m=>{const key=`${m.g}_${m.idx}`,r=appState.results?.group?.[key]||{};html+=`<div class="result-row"><span class="t">${m.h}</span><input type="number" class="score-input" id="res_${key}_h" value="${r.h??''}" min="0" max="20"><span class="vs">–</span><input type="number" class="score-input" id="res_${key}_a" value="${r.a??''}" min="0" max="20"><span class="t">${m.a}</span></div>`;});html+=`<button class="btn btn-outline btn-sm" style="margin-top:3px" onclick="saveGroupResults('${grp}')">Save Group ${grp}</button></div>`;});document.getElementById('groupResultsAdmin').innerHTML=html;}
-async function saveGroupResults(grp){if(!appState.results.group)appState.results.group={};(GROUP_MATCHES[grp]||[]).forEach(m=>{const key=`${m.g}_${m.idx}`,h=document.getElementById(`res_${key}_h`)?.value,a=document.getElementById(`res_${key}_a`)?.value;if(h!==''&&a!=='')appState.results.group[key]={h:parseInt(h),a:parseInt(a)};});await saveAppState();toast(`Group ${grp} results saved ✅`);}
+async function saveGroupResults(grp){if(!appState.results.group)appState.results.group={};const saves=[];(GROUP_MATCHES[grp]||[]).forEach(m=>{const key=`${m.g}_${m.idx}`,h=document.getElementById(`res_${key}_h`)?.value,a=document.getElementById(`res_${key}_a`)?.value;if(h!==''&&a!==''&&h!=null&&a!=null){appState.results.group[key]={h:parseInt(h),a:parseInt(a)};saves.push(saveResultRow(key,parseInt(h),parseInt(a)));}});await Promise.all(saves);recomputePoints();renderStandings();toast(`Group ${grp} results saved ✅`);}
 function renderAdminKOResults(){let html='';KO_STAGES.forEach(stage=>{const fx=appState.fixtures[stage]||[];if(!fx.length)return;html+=`<div style="margin-bottom:1rem"><div style="font-size:11px;color:var(--gold);font-weight:700;margin-bottom:5px">${KO_NAMES[stage]}</div>`;fx.forEach((m,i)=>{const res=appState.results[stage]?.[i]||'';html+=`<div style="display:flex;gap:5px;align-items:center;margin-bottom:5px;font-size:12px"><span style="flex:2">${m[0]} vs ${m[1]}</span><select class="text-input" id="kores_${stage}_${i}" style="flex:1.5;padding:5px"><option value="">—</option><option value="${m[0]}" ${res===m[0]?'selected':''}>${m[0]}</option><option value="${m[1]}" ${res===m[1]?'selected':''}>${m[1]}</option></select></div>`;});html+=`<button class="btn btn-outline btn-sm" onclick="saveKOResults('${stage}')">Save ${KO_NAMES[stage]}</button></div>`;});document.getElementById('koResultsAdmin').innerHTML=html||'<p style="color:var(--gray);font-size:13px">Set fixtures first.</p>';}
-async function saveKOResults(stage){if(!appState.results[stage])appState.results[stage]={};(appState.fixtures[stage]||[]).forEach((m,i)=>{const v=document.getElementById(`kores_${stage}_${i}`)?.value;if(v)appState.results[stage][i]=v;});await saveAppState();toast(`${KO_NAMES[stage]} results saved ✅`);}
+async function saveKOResults(stage){if(!appState.results[stage])appState.results[stage]={};(appState.fixtures[stage]||[]).forEach((m,i)=>{const v=document.getElementById(`kores_${stage}_${i}`)?.value;if(v)appState.results[stage][i]=v;});await saveSetting('koresults',{r32:appState.results.r32,r16:appState.results.r16,qf:appState.results.qf,sf:appState.results.sf,final:appState.results.final});recomputePoints();renderStandings();toast(`${KO_NAMES[stage]} results saved ✅`);}
 function renderAdminBonusPts(){const players=appState.registeredPlayers||[];let html='<div style="font-size:12px;color:var(--gray);margin-bottom:.6rem">Manually award bonus pts for Golden Boot, Giant Killer, Dark Horse.</div>';if(!players.length)html+='<p style="color:var(--gray);font-size:13px">No players yet.</p>';else{html+=players.map(p=>{const pts=appState.manualBonus?.[p.name]||0;return`<div class="admin-row" style="margin-bottom:5px"><label>${p.name}</label><input type="number" class="score-input" id="mbonus_${p.name.replace(/\s/g,'_')}" value="${pts}" min="0" max="300" style="width:55px"><span style="font-size:11px;color:var(--gray)">pts</span></div>`;}).join('');html+=`<button class="btn btn-outline btn-sm" style="margin-top:.4rem" onclick="saveManualBonus()">Save Bonus Points</button>`;}document.getElementById('bonusPtsAdmin').innerHTML=html;}
-async function saveManualBonus(){if(!appState.manualBonus)appState.manualBonus={};(appState.registeredPlayers||[]).forEach(p=>{const v=document.getElementById(`mbonus_${p.name.replace(/\s/g,'_')}`)?.value;if(v!==undefined)appState.manualBonus[p.name]=parseInt(v)||0;});await saveAppState();toast('Bonus points saved ✅');}
+async function saveManualBonus(){if(!appState.manualBonus)appState.manualBonus={};(appState.registeredPlayers||[]).forEach(p=>{const v=document.getElementById(`mbonus_${p.name.replace(/\s/g,'_')}`)?.value;if(v!==undefined)appState.manualBonus[p.name]=parseInt(v)||0;});await saveSetting('manualBonus',appState.manualBonus);recomputePoints();renderStandings();toast('Bonus points saved ✅');}
 
 // ─── RECALCULATE ──────────────────────────────────────────────
 async function recalcAll(){
@@ -1347,10 +1328,11 @@ window.importMergeJson=async function(){
   });
   if(!appState.pins)appState.pins={};
   Object.entries(data.pins||{}).forEach(([n,pin])=>{if(!appState.pins[n]&&!/^\d+$/.test(String(n).trim())){appState.pins[n]=pin;addedPins++;}});
-  await autoRecalc();
-  await saveAppState();
+  // persist every imported player as their own Supabase row
+  for(const p of appState.registeredPlayers){await savePlayerRow(p.name);}
+  recomputePoints();
   renderAdminPanel();renderStandings();
-  if(status)status.textContent=`✅ Merged: +${addedPlayers} players, +${addedPicks} picks, +${addedPins} PINs. Points recalculated.`;
+  if(status)status.textContent=`✅ Merged: +${addedPlayers} players, +${addedPicks} picks, +${addedPins} PINs.`;
   toast('Backup merged ✅');
 };
 
@@ -1381,8 +1363,8 @@ window.rescueUser=async function(){
   }
   if(!appState.pins)appState.pins={};
   if(pin&&!appState.pins[newName])appState.pins[newName]=pin;
-  await autoRecalc();
-  await saveAppState();
+  await savePlayerRow(newName);
+  recomputePoints();
   renderAdminPanel();renderStandings();
   const picksCount=ud?Object.keys(ud.groupPicks||{}).length:0;
   const hasBonus=ud&&ud.bonusPicks&&Object.values(ud.bonusPicks).some(v=>v);
