@@ -576,9 +576,12 @@ async function saveAppState(){
 
 function loadUserData(n){
   if(!appState.userData)appState.userData={};
+  // ALWAYS prefer the shared cloud copy (so H2H, scoring, distribution see everyone).
   if(appState.userData[n])return JSON.parse(JSON.stringify(appState.userData[n]));
-  // fallback to local cache
-  try{const r=localStorage.getItem('wc26_u_'+n);if(r)return JSON.parse(r);}catch(e){}
+  // Only fall back to local cache for the CURRENT user (their own in-progress work).
+  if(n===currentUser){
+    try{const r=localStorage.getItem('wc26_u_'+n);if(r)return JSON.parse(r);}catch(e){}
+  }
   return{name:n,groupPicks:{},bonusPicks:{},koPicks:{}};
 }
 function saveUserData(ud){
@@ -1302,6 +1305,75 @@ async function recalcAll(){
   }
   await saveAppState();renderStandings();toast('All points recalculated ✅');
 }
+
+window.importMergeJson=async function(){
+  const status=document.getElementById('import_status');
+  let data;
+  try{data=JSON.parse(document.getElementById('importJson').value);}
+  catch(e){if(status)status.textContent='⚠️ Invalid JSON — copy the whole content including { }';return;}
+  if(data.record)data=data.record;
+  let addedPlayers=0,addedPicks=0,addedPins=0;
+  const existing=new Set((appState.registeredPlayers||[]).map(p=>p.name.toLowerCase()));
+  (data.registeredPlayers||[]).forEach(p=>{
+    if(p&&typeof p.name==='string'&&p.name.trim()&&!/^\d+$/.test(p.name.trim())&&!existing.has(p.name.toLowerCase())){
+      appState.registeredPlayers.push(p);existing.add(p.name.toLowerCase());addedPlayers++;
+    }
+  });
+  if(!appState.userData)appState.userData={};
+  Object.entries(data.userData||{}).forEach(([name,ud])=>{
+    if(/^\d+$/.test(String(name).trim()))return;
+    if(!appState.userData[name]){appState.userData[name]=ud;addedPicks++;return;}
+    const cur=appState.userData[name];
+    ['groupPicks','koPicks'].forEach(k=>{
+      if(!ud[k])return;if(!cur[k])cur[k]={};
+      Object.entries(ud[k]).forEach(([key,v])=>{if(cur[k][key]==null){cur[k][key]=v;addedPicks++;}});
+    });
+    if(ud.bonusPicks&&(!cur.bonusPicks||!Object.values(cur.bonusPicks).some(v=>v)))cur.bonusPicks=ud.bonusPicks;
+  });
+  if(!appState.pins)appState.pins={};
+  Object.entries(data.pins||{}).forEach(([n,pin])=>{if(!appState.pins[n]&&!/^\d+$/.test(String(n).trim())){appState.pins[n]=pin;addedPins++;}});
+  await autoRecalc();
+  await saveAppState();
+  renderAdminPanel();renderStandings();
+  if(status)status.textContent=`✅ Merged: +${addedPlayers} players, +${addedPicks} picks, +${addedPins} PINs. Points recalculated.`;
+  toast('Backup merged ✅');
+};
+
+window.rescueUser=async function(){
+  const status=document.getElementById('rescue_status');
+  const oldName=(document.getElementById('rescue_old')?.value||'').trim();
+  const newName=(document.getElementById('rescue_new')?.value||'').trim();
+  if(!oldName||!newName){if(status)status.textContent='⚠️ Fill both fields';return;}
+  if(/^\d+$/.test(newName)){if(status)status.textContent='⚠️ The real name cannot be a number';return;}
+  let data;
+  try{data=JSON.parse(document.getElementById('importJson').value);}
+  catch(e){if(status)status.textContent='⚠️ Paste the old-version JSON in the box above first';return;}
+  if(data.record)data=data.record;
+  const ud=(data.userData||{})[oldName];
+  const pin=(data.pins||{})[oldName];
+  if(!ud&&!pin){if(status)status.textContent=`⚠️ No data found for "${oldName}" in the pasted JSON`;return;}
+  if(!appState.registeredPlayers.find(p=>p.name.toLowerCase()===newName.toLowerCase())){
+    appState.registeredPlayers.push({name:newName,addedAt:new Date().toISOString(),rescuedFrom:oldName});
+  }
+  if(!appState.userData)appState.userData={};
+  if(ud){
+    const cur=appState.userData[newName]||{name:newName,groupPicks:{},bonusPicks:{},koPicks:{}};
+    Object.entries(ud.groupPicks||{}).forEach(([k,v])=>{if(cur.groupPicks[k]==null)cur.groupPicks[k]=v;});
+    Object.keys(ud.koPicks||{}).forEach(st=>{if(!cur.koPicks[st])cur.koPicks[st]={};Object.entries(ud.koPicks[st]).forEach(([k,v])=>{if(cur.koPicks[st][k]==null)cur.koPicks[st][k]=v;});});
+    if(ud.bonusPicks&&(!cur.bonusPicks||!Object.values(cur.bonusPicks).some(v=>v)))cur.bonusPicks=ud.bonusPicks;
+    cur.name=newName;
+    appState.userData[newName]=cur;
+  }
+  if(!appState.pins)appState.pins={};
+  if(pin&&!appState.pins[newName])appState.pins[newName]=pin;
+  await autoRecalc();
+  await saveAppState();
+  renderAdminPanel();renderStandings();
+  const picksCount=ud?Object.keys(ud.groupPicks||{}).length:0;
+  const hasBonus=ud&&ud.bonusPicks&&Object.values(ud.bonusPicks).some(v=>v);
+  if(status)status.textContent=`✅ Rescued "${oldName}" as "${newName}": ${picksCount} group picks${hasBonus?' + bonus picks':''}${pin?' + PIN':''}. Points recalculated.`;
+  toast(`${newName} rescued ✅`);
+};
 
 function exportData(){const blob=new Blob([JSON.stringify(appState,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='wc2026_data.json';a.click();}
 function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2800);}
