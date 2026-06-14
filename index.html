@@ -500,15 +500,26 @@ async function loadAppState(){
     appState={...appState,...rec};
     appState.userData=appState.userData||{};
     if(currentUser&&localUserData[currentUser])appState.userData[currentUser]={...appState.userData[currentUser],...localUserData[currentUser]};
+    // Build registered list: keep named players, plus numeric-named ONLY if they have real data
+    const hasRealData=(n)=>{
+      const ud=(appState.userData||{})[n];
+      const hasPicks=ud&&((ud.groupPicks&&Object.keys(ud.groupPicks).length)||(ud.bonusPicks&&Object.values(ud.bonusPicks).some(v=>v))||(ud.koPicks&&Object.keys(ud.koPicks).length));
+      const hasPin=(appState.pins||{})[n];
+      return hasPicks||hasPin;
+    };
     if(Array.isArray(appState.registeredPlayers)){
       appState.registeredPlayers=cleanPlayers(appState.registeredPlayers);
     } else {appState.registeredPlayers=[];}
-    // Ensure anyone who has picks/pins/points is also in the registered list (incl. numeric-named real players)
+    // drop named-list entries that are bare numbers with no data
+    appState.registeredPlayers=appState.registeredPlayers.filter(p=>!/^\d+$/.test(String(p.name).trim())||hasRealData(String(p.name).trim()));
     const regset=new Set(appState.registeredPlayers.map(p=>String(p.name).toLowerCase()));
-    [...Object.keys(appState.userData||{}),...Object.keys(appState.pins||{}),...Object.keys(appState.playerPts||{})].forEach(n=>{
+    // add in anyone with real data who isn't already listed
+    [...Object.keys(appState.userData||{}),...Object.keys(appState.pins||{})].forEach(n=>{
       const nm=String(n).trim();
-      if(nm&&!regset.has(nm.toLowerCase())){appState.registeredPlayers.push({name:nm});regset.add(nm.toLowerCase());}
+      if(nm&&!regset.has(nm.toLowerCase())&&(!/^\d+$/.test(nm)||hasRealData(nm))){appState.registeredPlayers.push({name:nm});regset.add(nm.toLowerCase());}
     });
+    // purge empty numeric entries from points map
+    Object.keys(appState.playerPts||{}).forEach(k=>{if(/^\d+$/.test(String(k).trim())&&!hasRealData(String(k).trim()))delete appState.playerPts[k];});
     appState.playerPts=cleanPtsMap(appState.playerPts);
     appState.manualBonus=cleanPtsMap(appState.manualBonus);
     if(!Array.isArray(appState.activityFeed))appState.activityFeed=[];
